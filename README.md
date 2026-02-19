@@ -136,6 +136,12 @@ Copy the example env file and add your API keys:
 cp .env.example .env.local
 ```
 
+Or use the interactive setup wizard (can init `.env.local`, sync `.env` for Docker, and prompt for keys with hidden input):
+
+```bash
+pnpm run setup
+```
+
 ```bash
 # AI Provider API Keys (add any you use)
 OPENAI_API_KEY=your_openai_key
