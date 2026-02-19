@@ -304,8 +304,12 @@ export const Menu = () => {
   }, [open]);
 
   const handleDuplicate = async (id: string) => {
-    await duplicateCurrentChat(id);
-    loadEntries(); // Reload the list after duplication
+    try {
+      await duplicateCurrentChat(id);
+      loadEntries(); // Reload the list after duplication
+    } catch {
+      toast.error('Failed to duplicate chat');
+    }
   };
 
   const handleSettingsClick = () => {

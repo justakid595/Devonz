@@ -841,11 +841,19 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
       } else if (event.data.type === 'INSPECTOR_CLICK') {
         const element = event.data.elementInfo;
 
-        navigator.clipboard.writeText(element.displayText).then(() => {
-          setSelectedElement?.(element);
-          setInspectorElement(element);
-          setIsInspectorPanelVisible(true);
-        });
+        navigator.clipboard
+          .writeText(element.displayText)
+          .then(() => {
+            setSelectedElement?.(element);
+            setInspectorElement(element);
+            setIsInspectorPanelVisible(true);
+          })
+          .catch(() => {
+            // Still show inspector even if clipboard write fails
+            setSelectedElement?.(element);
+            setInspectorElement(element);
+            setIsInspectorPanelVisible(true);
+          });
       } else if (event.data.type === 'INSPECTOR_BULK_APPLIED') {
         setBulkAffectedCount(event.data.count);
       } else if (event.data.type === 'INSPECTOR_BULK_REVERTED') {

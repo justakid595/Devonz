@@ -125,12 +125,16 @@ export function DataTab() {
     onReloadChats: () => {
       // Reload chats after reset
       if (db) {
-        getAllChats(db).then((chats) => {
-          // Cast to ExtendedChat to handle additional properties
-          const extendedChats = chats as ExtendedChat[];
-          setAvailableChats(extendedChats);
-          setChatItems(extendedChats.map((chat) => createChatItem(chat)));
-        });
+        getAllChats(db)
+          .then((chats) => {
+            // Cast to ExtendedChat to handle additional properties
+            const extendedChats = chats as ExtendedChat[];
+            setAvailableChats(extendedChats);
+            setChatItems(extendedChats.map((chat) => createChatItem(chat)));
+          })
+          .catch((error) => {
+            logger.error('Error reloading chats:', error);
+          });
       }
     },
     onResetSettings: () => setShowResetInlineConfirm(false),

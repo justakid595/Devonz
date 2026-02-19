@@ -353,29 +353,37 @@ function FileContextMenu({
   );
 
   const handleCreateFile = async (fileName: string) => {
-    const newFilePath = path.join(targetPath, fileName);
-    const success = await workbenchStore.createFile(newFilePath, '');
+    try {
+      const newFilePath = path.join(targetPath, fileName);
+      const success = await workbenchStore.createFile(newFilePath, '');
 
-    if (success) {
-      toast.success('File created successfully');
-    } else {
+      if (success) {
+        toast.success('File created successfully');
+      } else {
+        toast.error('Failed to create file');
+      }
+    } catch {
       toast.error('Failed to create file');
+    } finally {
+      setIsCreatingFile(false);
     }
-
-    setIsCreatingFile(false);
   };
 
   const handleCreateFolder = async (folderName: string) => {
-    const newFolderPath = path.join(targetPath, folderName);
-    const success = await workbenchStore.createFolder(newFolderPath);
+    try {
+      const newFolderPath = path.join(targetPath, folderName);
+      const success = await workbenchStore.createFolder(newFolderPath);
 
-    if (success) {
-      toast.success('Folder created successfully');
-    } else {
+      if (success) {
+        toast.success('Folder created successfully');
+      } else {
+        toast.error('Failed to create folder');
+      }
+    } catch {
       toast.error('Failed to create folder');
+    } finally {
+      setIsCreatingFolder(false);
     }
-
-    setIsCreatingFolder(false);
   };
 
   const handleDelete = async () => {

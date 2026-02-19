@@ -461,66 +461,70 @@ function setEditorDocument(
     effects: [editableStateEffect.of(editable && !doc.isBinary && !locked)],
   });
 
-  getLanguage(doc.filePath).then((languageSupport) => {
-    if (!languageSupport) {
-      return;
-    }
-
-    view.dispatch({
-      effects: [languageCompartment.reconfigure([languageSupport]), reconfigureTheme(theme)],
-    });
-
-    requestAnimationFrame(() => {
-      const currentLeft = view.scrollDOM.scrollLeft;
-      const currentTop = view.scrollDOM.scrollTop;
-      const newLeft = doc.scroll?.left ?? 0;
-      const newTop = doc.scroll?.top ?? 0;
-
-      if (typeof doc.scroll?.line === 'number') {
-        const line = doc.scroll.line;
-        const column = doc.scroll.column ?? 0;
-
-        try {
-          // Check if the line number is valid for the current document
-          const totalLines = view.state.doc.lines;
-
-          // Only proceed if the line number is within the document's range
-          if (line < totalLines) {
-            const linePos = view.state.doc.line(line + 1).from + column;
-            view.dispatch({
-              selection: { anchor: linePos },
-              scrollIntoView: true,
-            });
-            view.focus();
-          } else {
-            logger.warn(`Invalid line number ${line + 1} in ${totalLines}-line document`);
-          }
-        } catch (error) {
-          logger.error('Error scrolling to line:', error);
-        }
-
+  getLanguage(doc.filePath)
+    .then((languageSupport) => {
+      if (!languageSupport) {
         return;
       }
 
-      const needsScrolling = currentLeft !== newLeft || currentTop !== newTop;
+      view.dispatch({
+        effects: [languageCompartment.reconfigure([languageSupport]), reconfigureTheme(theme)],
+      });
 
-      if (autoFocus && editable) {
-        if (needsScrolling) {
-          view.scrollDOM.addEventListener(
-            'scroll',
-            () => {
+      requestAnimationFrame(() => {
+        const currentLeft = view.scrollDOM.scrollLeft;
+        const currentTop = view.scrollDOM.scrollTop;
+        const newLeft = doc.scroll?.left ?? 0;
+        const newTop = doc.scroll?.top ?? 0;
+
+        if (typeof doc.scroll?.line === 'number') {
+          const line = doc.scroll.line;
+          const column = doc.scroll.column ?? 0;
+
+          try {
+            // Check if the line number is valid for the current document
+            const totalLines = view.state.doc.lines;
+
+            // Only proceed if the line number is within the document's range
+            if (line < totalLines) {
+              const linePos = view.state.doc.line(line + 1).from + column;
+              view.dispatch({
+                selection: { anchor: linePos },
+                scrollIntoView: true,
+              });
               view.focus();
-            },
-            { once: true },
-          );
-        } else {
-          view.focus();
-        }
-      }
+            } else {
+              logger.warn(`Invalid line number ${line + 1} in ${totalLines}-line document`);
+            }
+          } catch (error) {
+            logger.error('Error scrolling to line:', error);
+          }
 
-      view.scrollDOM.scrollTo(newLeft, newTop);
+          return;
+        }
+
+        const needsScrolling = currentLeft !== newLeft || currentTop !== newTop;
+
+        if (autoFocus && editable) {
+          if (needsScrolling) {
+            view.scrollDOM.addEventListener(
+              'scroll',
+              () => {
+                view.focus();
+              },
+              { once: true },
+            );
+          } else {
+            view.focus();
+          }
+        }
+
+        view.scrollDOM.scrollTo(newLeft, newTop);
+      });
+    })
+    .catch((error) => {
+      logger.warn('Failed to load language support:', error);
     });
-  });
 }
 
 function getReadOnlyTooltip(state: EditorState) {
