@@ -180,12 +180,6 @@ export default function VercelConnection() {
                     in your .env.local for automatic connection.
                   </p>
                 </div>
-                {/* Debug info - remove this later */}
-                <div className="mt-2 text-xs text-gray-500">
-                  <p>Debug: Token present: {connection.token ? '✅' : '❌'}</p>
-                  <p>Debug: User present: {connection.user ? '✅' : '❌'}</p>
-                  <p>Debug: Env token: {import.meta.env?.VITE_VERCEL_ACCESS_TOKEN ? '✅' : '❌'}</p>
-                </div>
               </div>
             </div>
 
@@ -212,24 +206,6 @@ export default function VercelConnection() {
                     Connect
                   </>
                 )}
-              </button>
-
-              {/* Debug button - remove this later */}
-              <button
-                onClick={async () => {
-                  logger.debug('Manual auto-connect test');
-
-                  const result = await autoConnectVercel();
-
-                  if (result.success) {
-                    toast.success('Manual auto-connect successful');
-                  } else {
-                    toast.error(`Manual auto-connect failed: ${result.error}`);
-                  }
-                }}
-                className="px-3 py-2 rounded-lg text-xs bg-blue-500 text-white hover:bg-blue-600"
-              >
-                Test Auto-Connect
               </button>
             </div>
           </div>
