@@ -107,7 +107,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
           />
         </Dialog>
       </DialogRoot>
-      <svg className={classNames(styles.PromptEffectContainer)}>
+      <svg className={classNames(styles.PromptEffectContainer)} aria-hidden="true">
         <defs>
           <linearGradient
             id="line-gradient"
