@@ -6,6 +6,8 @@ import { memo, useCallback, useEffect, useRef, useState, startTransition } from 
 import { toast } from 'react-toastify';
 import { useMessageParser, usePromptEnhancer, useShortcuts } from '~/lib/hooks';
 import { description, useChatHistory } from '~/lib/persistence';
+import { chatId } from '~/lib/persistence/useChatHistory';
+import { getProjectPlanMode, setProjectPlanMode } from '~/lib/persistence/projectPlanMode';
 import { chatStore, clearPendingChatMessage } from '~/lib/stores/chat';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, PROMPT_COOKIE_KEY, PROVIDER_LIST } from '~/utils/constants';
@@ -126,8 +128,40 @@ export const ChatImpl = memo(
     const [animationScope, animate] = useAnimate();
     const [apiKeys, setApiKeys] = useState<Record<string, string>>({});
     const [chatMode, setChatMode] = useState<'discuss' | 'build'>('build');
+    const currentChatId = useStore(chatId);
+    const [planMode, setPlanMode] = useState(false);
+    const skipNextPlanModeSave = useRef(false);
     const [selectedElement, setSelectedElement] = useState<ElementInfo | null>(null);
     const mcpSettings = useStore(mcpStore).settings;
+
+    // Restore plan mode from localStorage when chat changes
+    useEffect(() => {
+      if (!currentChatId) {
+        setPlanMode(false);
+        skipNextPlanModeSave.current = false;
+
+        return;
+      }
+
+      skipNextPlanModeSave.current = true;
+
+      const settings = getProjectPlanMode(currentChatId);
+      setPlanMode(settings.enabled);
+    }, [currentChatId]);
+
+    // Persist plan mode to localStorage when toggled
+    useEffect(() => {
+      if (!currentChatId) {
+        return;
+      }
+
+      if (skipNextPlanModeSave.current) {
+        skipNextPlanModeSave.current = false;
+        return;
+      }
+
+      setProjectPlanMode(currentChatId, { enabled: planMode });
+    }, [currentChatId, planMode]);
 
     const {
       messages,
@@ -153,6 +187,7 @@ export const ChatImpl = memo(
         enableThinking,
         chatMode,
         designScheme,
+        planMode,
         supabase: {
           isConnected: supabaseConn.isConnected,
           hasSelectedProject: !!selectedProject,
@@ -819,6 +854,8 @@ export const ChatImpl = memo(
         data={chatData}
         chatMode={chatMode}
         setChatMode={setChatMode}
+        planMode={planMode}
+        setPlanMode={setPlanMode}
         append={append}
         designScheme={designScheme}
         setDesignScheme={setDesignScheme}

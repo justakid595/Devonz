@@ -76,6 +76,7 @@ export async function streamText(props: {
   messageSliceId?: number;
   chatMode?: 'discuss' | 'build';
   designScheme?: DesignScheme;
+  planMode?: boolean;
 }) {
   const {
     messages,
@@ -91,6 +92,7 @@ export async function streamText(props: {
     chatMode,
     designScheme,
   } = props;
+  const planMode = props.planMode ?? false;
   const enableThinking = props.enableThinking ?? false;
   let currentModel = DEFAULT_MODEL;
   let currentProvider = DEFAULT_PROVIDER.name;
@@ -203,6 +205,21 @@ export async function streamText(props: {
     `;
   } else {
     logger.debug('No locked files found from any source for prompt.');
+  }
+
+  if (planMode) {
+    systemPrompt = `${systemPrompt}
+
+<plan_mode>
+PLANNING MODE IS ACTIVE. Before making any code changes you MUST:
+1. Create or update a PLAN.md file in the project root with a concise, actionable checklist of steps.
+2. Each step should be a checkbox item: \`- [ ] Step description\`
+3. Mark completed steps as \`- [x] Step description\` as you progress.
+4. Keep the plan scoped to the current request — avoid sprawling roadmaps.
+5. After PLAN.md exists and is up to date, proceed with the implementation.
+6. Update PLAN.md as each step is completed.
+</plan_mode>
+`;
   }
 
   // PROJECT.md: Persistent project memory - read from project root if exists

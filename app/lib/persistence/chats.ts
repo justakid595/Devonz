@@ -4,6 +4,7 @@
 
 import type { Message } from 'ai';
 import type { IChatMetadata } from './db'; // Import IChatMetadata
+import { clearProjectPlanMode } from './projectPlanMode';
 import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('ChatsDB');
@@ -112,6 +113,7 @@ export async function deleteChat(db: IDBDatabase, id: string): Promise<void> {
     const request = store.delete(id);
 
     request.onsuccess = () => {
+      clearProjectPlanMode(id);
       resolve();
     };
 

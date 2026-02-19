@@ -72,6 +72,7 @@ const chatRequestSchema = z.object({
   contextOptimization: z.boolean().default(false),
   enableThinking: z.boolean().default(false),
   chatMode: z.enum(['discuss', 'build']).default('build'),
+  planMode: z.boolean().default(false),
   designScheme: designSchemeSchema,
   supabase: supabaseConnectionSchema,
   maxLLMSteps: z.number().int().positive().default(5),
@@ -146,6 +147,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     supabase,
     chatMode,
     designScheme,
+    planMode,
     maxLLMSteps,
     agentMode,
   } = parsed.data as {
@@ -155,6 +157,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
     contextOptimization: boolean;
     enableThinking: boolean;
     chatMode: 'discuss' | 'build';
+    planMode: boolean;
     designScheme?: DesignScheme;
     supabase?: {
       isConnected: boolean;
@@ -461,6 +464,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
               contextFiles: filteredFiles,
               chatMode,
               designScheme,
+              planMode,
               summary,
               messageSliceId,
             });
@@ -505,6 +509,7 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
           contextFiles: filteredFiles,
           chatMode,
           designScheme,
+          planMode,
           summary,
           messageSliceId,
         });

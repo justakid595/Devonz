@@ -78,6 +78,8 @@ interface BaseChatProps {
   data?: JSONValue[] | undefined;
   chatMode?: 'discuss' | 'build';
   setChatMode?: (mode: 'discuss' | 'build') => void;
+  planMode?: boolean;
+  setPlanMode?: (enabled: boolean) => void;
   append?: (message: Message) => void;
   designScheme?: DesignScheme;
   setDesignScheme?: (scheme: DesignScheme) => void;
@@ -126,6 +128,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
       data,
       chatMode,
       setChatMode,
+      planMode,
+      setPlanMode,
       append,
       designScheme,
       setDesignScheme,
@@ -522,6 +526,8 @@ export const BaseChat = React.forwardRef<HTMLDivElement, BaseChatProps>(
                         handleFileUpload={handleFileUpload}
                         chatMode={chatMode}
                         setChatMode={setChatMode}
+                        planMode={planMode}
+                        setPlanMode={setPlanMode}
                         designScheme={designScheme}
                         setDesignScheme={setDesignScheme}
                         selectedElement={selectedElement}

@@ -1,4 +1,5 @@
 import type { Message } from 'ai';
+import { clearProjectPlanMode } from './projectPlanMode';
 import { createScopedLogger } from '~/utils/logger';
 import type { ChatHistoryItem } from './useChatHistory';
 import type { Snapshot } from './types'; // Import Snapshot type
@@ -136,7 +137,10 @@ export async function deleteById(db: IDBDatabase, id: string): Promise<void> {
     transaction.objectStore('snapshots').delete(id);
     transaction.objectStore('versions').delete(id);
 
-    transaction.oncomplete = () => resolve(undefined);
+    transaction.oncomplete = () => {
+      clearProjectPlanMode(id);
+      resolve(undefined);
+    };
     transaction.onerror = () => reject(transaction.error);
   });
 }

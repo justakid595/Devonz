@@ -1,6 +1,7 @@
 import Cookies from 'js-cookie';
 import { type Message } from 'ai';
 import { getAllChats, deleteChat } from '~/lib/persistence/chats';
+import { clearAllProjectPlanMode } from '~/lib/persistence/projectPlanMode';
 import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('ImportExportService');
@@ -356,6 +357,9 @@ export class ImportExportService {
       await Promise.all(deletePromises);
     }
 
+    // 3b. Clear all plan mode settings (catch any orphans)
+    clearAllProjectPlanMode();
+
     // 4. Clear any chat snapshots
     const snapshotKeys = Object.keys(localStorage).filter((key) => key.startsWith('snapshot:'));
     snapshotKeys.forEach((key) => {
@@ -384,6 +388,9 @@ export class ImportExportService {
     const chats = await getAllChats(db);
     const deletePromises = chats.map((chat) => deleteChat(db, chat.id));
     await Promise.all(deletePromises);
+
+    // Clear all plan mode settings
+    clearAllProjectPlanMode();
   }
 
   // Private helper methods
