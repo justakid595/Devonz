@@ -26,7 +26,7 @@ function SetupGuide({ onBack }: { onBack: () => void }) {
       </div>
 
       {/* Hardware Requirements Overview */}
-      <Card className="bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/20 shadow-sm">
+      <Card className="bg-gradient-to-r from-[#06B6D4]/10 to-[#06B6D4]/5 border border-bolt-elements-borderColorActive/20 shadow-sm">
         <CardContent className="p-6">
           <div className="flex items-center gap-3 mb-4">
             <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
@@ -54,7 +54,7 @@ function SetupGuide({ onBack }: { onBack: () => void }) {
             </div>
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <div className="i-ph:monitor w-4 h-4 text-purple-500" />
+                <div className="i-ph:monitor w-4 h-4 text-bolt-elements-item-contentAccent" />
                 <span className="font-medium text-bolt-elements-textPrimary">GPU</span>
               </div>
               <p className="text-bolt-elements-textSecondary">NVIDIA RTX 30xx+ or AMD RX 6000+</p>
@@ -67,8 +67,8 @@ function SetupGuide({ onBack }: { onBack: () => void }) {
       <Card className="bg-bolt-elements-background-depth-2 shadow-sm">
         <CardHeader className="pb-6">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500/20 to-purple-600/20 flex items-center justify-center ring-1 ring-purple-500/30">
-              <div className="i-ph:hard-drive w-6 h-6 text-purple-500" />
+            <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#06B6D4]/20 to-[#06B6D4]/20 flex items-center justify-center ring-1 ring-bolt-elements-borderColorActive/30">
+              <div className="i-ph:hard-drive w-6 h-6 text-bolt-elements-item-contentAccent" />
             </div>
             <div className="flex-1">
               <h3 className="text-xl font-semibold text-bolt-elements-textPrimary">Ollama Setup</h3>
@@ -76,7 +76,7 @@ function SetupGuide({ onBack }: { onBack: () => void }) {
                 Most popular choice for running open-source models locally with desktop app
               </p>
             </div>
-            <span className="px-3 py-1 bg-purple-500/10 text-purple-500 text-xs font-medium rounded-full">
+            <span className="px-3 py-1 bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent text-xs font-medium rounded-full">
               Recommended
             </span>
           </div>
@@ -107,7 +107,7 @@ function SetupGuide({ onBack }: { onBack: () => void }) {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="w-full bg-gradient-to-r from-purple-500/10 to-purple-600/10 hover:from-purple-500/20 hover:to-purple-600/20 border-purple-500/30 hover:border-purple-500/50 transition-all duration-300 gap-2 group shadow-sm hover:shadow-lg hover:shadow-purple-500/20 font-medium"
+                    className="w-full bg-gradient-to-r from-[#06B6D4]/10 to-[#06B6D4]/10 hover:from-[#06B6D4]/20 hover:to-[#06B6D4]/20 border-bolt-elements-borderColorActive/30 hover:border-bolt-elements-borderColorActive transition-all duration-300 gap-2 group shadow-sm hover:shadow-lg hover:shadow-[#06B6D4]/20 font-medium"
                     _asChild
                   >
                     <a
@@ -130,7 +130,7 @@ function SetupGuide({ onBack }: { onBack: () => void }) {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="w-full bg-gradient-to-r from-purple-500/10 to-purple-600/10 hover:from-purple-500/20 hover:to-purple-600/20 border-purple-500/30 hover:border-purple-500/50 transition-all duration-300 gap-2 group shadow-sm hover:shadow-lg hover:shadow-purple-500/20 font-medium"
+                    className="w-full bg-gradient-to-r from-[#06B6D4]/10 to-[#06B6D4]/10 hover:from-[#06B6D4]/20 hover:to-[#06B6D4]/20 border-bolt-elements-borderColorActive/30 hover:border-bolt-elements-borderColorActive transition-all duration-300 gap-2 group shadow-sm hover:shadow-lg hover:shadow-[#06B6D4]/20 font-medium"
                     _asChild
                   >
                     <a
@@ -231,10 +231,10 @@ function SetupGuide({ onBack }: { onBack: () => void }) {
               </div>
             </div>
             <div className="grid md:grid-cols-2 gap-4">
-              <div className="p-4 rounded-lg bg-purple-500/5 border border-purple-500/20">
+              <div className="p-4 rounded-lg bg-[#06B6D4]/5 border border-bolt-elements-borderColorActive/20">
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="i-ph:activity w-4 h-4 text-purple-500" />
-                  <span className="font-medium text-purple-500">Performance Optimized</span>
+                  <div className="i-ph:activity w-4 h-4 text-bolt-elements-item-contentAccent" />
+                  <span className="font-medium text-bolt-elements-item-contentAccent">Performance Optimized</span>
                 </div>
                 <ul className="text-xs text-bolt-elements-textSecondary space-y-1">
                   <li>• Llama 3.2: 3B - Fastest, 8GB RAM</li>
@@ -508,11 +508,11 @@ function SetupGuide({ onBack }: { onBack: () => void }) {
       </Card>
 
       {/* Performance Optimization */}
-      <Card className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/20 shadow-sm">
+      <Card className="bg-gradient-to-r from-[#06B6D4]/10 to-[#06B6D4]/5 border border-bolt-elements-borderColorActive/20 shadow-sm">
         <CardHeader className="pb-4">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-              <div className="i-ph:activity w-5 h-5 text-purple-500" />
+            <div className="w-10 h-10 rounded-lg bg-[#06B6D4]/20 flex items-center justify-center">
+              <div className="i-ph:activity w-5 h-5 text-bolt-elements-item-contentAccent" />
             </div>
             <div>
               <h3 className="text-lg font-semibold text-bolt-elements-textPrimary">Performance Optimization</h3>
@@ -608,7 +608,7 @@ function SetupGuide({ onBack }: { onBack: () => void }) {
                 </div>
                 <div className="p-3 rounded-lg bg-bolt-elements-background-depth-3">
                   <div className="flex items-center gap-2 mb-1">
-                    <div className="i-ph:plugs-connected w-4 h-4 text-purple-500" />
+                    <div className="i-ph:plugs-connected w-4 h-4 text-bolt-elements-item-contentAccent" />
                     <span className="font-medium text-bolt-elements-textPrimary">KoboldAI</span>
                   </div>
                   <p className="text-xs text-bolt-elements-textSecondary">Focus on creative writing and storytelling</p>

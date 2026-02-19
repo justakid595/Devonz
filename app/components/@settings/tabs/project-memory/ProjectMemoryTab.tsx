@@ -137,8 +137,9 @@ export default function ProjectMemoryTab() {
             'border border-bolt-elements-borderColor',
           )}
         >
-          <h4 className="text-sm font-medium text-bolt-elements-textPrimary mb-2">
-            💡 What can you put in Project Memory?
+          <h4 className="text-sm font-medium text-bolt-elements-textPrimary mb-2 flex items-center gap-2">
+            <div className="i-ph:lightbulb w-4 h-4 text-bolt-elements-item-contentAccent" />
+            What can you put in Project Memory?
           </h4>
           <ul className="text-sm text-bolt-elements-textSecondary space-y-1 list-disc list-inside">
             <li>Coding standards and conventions (e.g., "Use TypeScript strict mode")</li>

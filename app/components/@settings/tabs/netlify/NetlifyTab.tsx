@@ -792,9 +792,9 @@ export default function NetlifyTab() {
                         label: 'Custom Domain',
                         value: customDomain,
                         icon: 'i-ph:globe',
-                        color: 'text-purple-500',
-                        bgColor: 'bg-purple-100 dark:bg-purple-900/20',
-                        textColor: 'text-purple-800 dark:text-purple-400',
+                        color: 'text-bolt-elements-item-contentAccent',
+                        bgColor: 'bg-bolt-elements-item-backgroundAccent',
+                        textColor: 'text-bolt-elements-item-contentAccent',
                       },
                       {
                         label: 'Building',

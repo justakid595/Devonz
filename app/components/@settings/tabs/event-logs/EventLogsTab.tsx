@@ -138,7 +138,7 @@ const LogEntryItem = ({ log, isExpanded: forceExpanded, use24Hour, showTimestamp
     if (log.category === 'provider') {
       return (
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+          <div className="flex items-center gap-2 text-xs text-bolt-elements-textTertiary">
             <span>Model: {details.model}</span>
             <span>•</span>
             <span>Tokens: {details.totalTokens}</span>
@@ -147,16 +147,16 @@ const LogEntryItem = ({ log, isExpanded: forceExpanded, use24Hour, showTimestamp
           </div>
           {details.prompt && (
             <div className="flex flex-col gap-1">
-              <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Prompt:</div>
-              <pre className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded p-2 whitespace-pre-wrap">
+              <div className="text-xs font-medium text-bolt-elements-textPrimary">Prompt:</div>
+              <pre className="text-xs text-bolt-elements-textSecondary bg-bolt-elements-bg-depth-2 rounded p-2 whitespace-pre-wrap">
                 {details.prompt}
               </pre>
             </div>
           )}
           {details.response && (
             <div className="flex flex-col gap-1">
-              <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Response:</div>
-              <pre className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded p-2 whitespace-pre-wrap">
+              <div className="text-xs font-medium text-bolt-elements-textPrimary">Response:</div>
+              <pre className="text-xs text-bolt-elements-textSecondary bg-bolt-elements-bg-depth-2 rounded p-2 whitespace-pre-wrap">
                 {details.response}
               </pre>
             </div>
@@ -168,26 +168,26 @@ const LogEntryItem = ({ log, isExpanded: forceExpanded, use24Hour, showTimestamp
     if (log.category === 'api') {
       return (
         <div className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+          <div className="flex items-center gap-2 text-xs text-bolt-elements-textTertiary">
             <span className={details.method === 'GET' ? 'text-green-500' : 'text-blue-500'}>{details.method}</span>
             <span>•</span>
             <span>Status: {details.statusCode}</span>
             <span>•</span>
             <span>Duration: {details.duration}ms</span>
           </div>
-          <div className="text-xs text-gray-600 dark:text-gray-400 break-all">{details.url}</div>
+          <div className="text-xs text-bolt-elements-textSecondary break-all">{details.url}</div>
           {details.request && (
             <div className="flex flex-col gap-1">
-              <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Request:</div>
-              <pre className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded p-2 whitespace-pre-wrap">
+              <div className="text-xs font-medium text-bolt-elements-textPrimary">Request:</div>
+              <pre className="text-xs text-bolt-elements-textSecondary bg-bolt-elements-bg-depth-2 rounded p-2 whitespace-pre-wrap">
                 {JSON.stringify(details.request, null, 2)}
               </pre>
             </div>
           )}
           {details.response && (
             <div className="flex flex-col gap-1">
-              <div className="text-xs font-medium text-gray-700 dark:text-gray-300">Response:</div>
-              <pre className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded p-2 whitespace-pre-wrap">
+              <div className="text-xs font-medium text-bolt-elements-textPrimary">Response:</div>
+              <pre className="text-xs text-bolt-elements-textSecondary bg-bolt-elements-bg-depth-2 rounded p-2 whitespace-pre-wrap">
                 {JSON.stringify(details.response, null, 2)}
               </pre>
             </div>
@@ -205,7 +205,7 @@ const LogEntryItem = ({ log, isExpanded: forceExpanded, use24Hour, showTimestamp
     }
 
     return (
-      <pre className="text-xs text-gray-600 dark:text-gray-400 bg-gray-50 dark:bg-gray-800/50 rounded whitespace-pre-wrap">
+      <pre className="text-xs text-bolt-elements-textSecondary bg-bolt-elements-bg-depth-2 rounded whitespace-pre-wrap">
         {JSON.stringify(details, null, 2)}
       </pre>
     );
@@ -228,12 +228,12 @@ const LogEntryItem = ({ log, isExpanded: forceExpanded, use24Hour, showTimestamp
         <div className="flex items-start gap-3">
           <span className={classNames('text-lg', style.icon, style.color)} />
           <div className="flex flex-col gap-1">
-            <div className="text-sm font-medium text-gray-900 dark:text-white">{log.message}</div>
+            <div className="text-sm font-medium text-bolt-elements-textPrimary">{log.message}</div>
             {log.details && (
               <>
                 <button
                   onClick={() => setLocalExpanded(!localExpanded)}
-                  className="text-xs text-gray-500 dark:text-gray-400 hover:text-purple-500 dark:hover:text-purple-400 transition-colors"
+                  className="text-xs text-bolt-elements-textTertiary hover:text-bolt-elements-item-contentAccent transition-colors"
                 >
                   {localExpanded ? 'Hide' : 'Show'} Details
                 </button>
@@ -245,14 +245,14 @@ const LogEntryItem = ({ log, isExpanded: forceExpanded, use24Hour, showTimestamp
                 {log.level}
               </div>
               {log.category && (
-                <div className="px-2 py-0.5 rounded-full text-xs bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400">
+                <div className="px-2 py-0.5 rounded-full text-xs bg-bolt-elements-bg-depth-2 text-bolt-elements-textTertiary">
                   {log.category}
                 </div>
               )}
             </div>
           </div>
         </div>
-        {showTimestamp && <time className="shrink-0 text-xs text-gray-500 dark:text-gray-400">{timestamp}</time>}
+        {showTimestamp && <time className="shrink-0 text-xs text-bolt-elements-textTertiary">{timestamp}</time>}
       </div>
     </motion.div>
   );
@@ -811,11 +811,11 @@ export function EventLogsTab() {
             'text-sm text-gray-900 dark:text-white',
             'bg-bolt-elements-bg-depth-1',
             'border border-bolt-elements-borderColor',
-            'hover:bg-purple-500/10 dark:hover:bg-purple-500/20',
+            'hover:bg-bolt-elements-item-backgroundAccent',
             'transition-all duration-200',
           )}
         >
-          <span className="i-ph:download text-lg text-gray-500 dark:text-gray-400 group-hover:text-purple-500 transition-colors" />
+          <span className="i-ph:download text-lg text-gray-500 dark:text-gray-400 group-hover:text-bolt-elements-item-contentAccent transition-colors" />
           Export
         </button>
 
@@ -836,7 +836,7 @@ export function EventLogsTab() {
                     'bg-bolt-elements-bg-depth-1',
                     'border border-bolt-elements-borderColor',
                     'hover:bg-bolt-elements-bg-depth-2',
-                    'hover:border-purple-200 dark:hover:border-purple-900/30',
+                    'hover:border-bolt-elements-borderColorActive',
                     'text-bolt-elements-textPrimary',
                   )}
                 >
@@ -861,127 +861,139 @@ export function EventLogsTab() {
 
   return (
     <div className="flex h-full flex-col gap-6">
-      <div className="flex items-center justify-between">
-        <DropdownMenu.Root open={showLevelFilter} onOpenChange={setShowLevelFilter}>
-          <DropdownMenu.Trigger asChild>
-            <button
+      <div className="flex flex-col gap-3">
+        {/* Row 1: Filter + Search */}
+        <div className="flex items-center gap-3">
+          <DropdownMenu.Root open={showLevelFilter} onOpenChange={setShowLevelFilter}>
+            <DropdownMenu.Trigger asChild>
+              <button
+                className={classNames(
+                  'flex items-center gap-2',
+                  'rounded-lg px-3 py-1.5',
+                  'text-sm text-bolt-elements-textPrimary',
+                  'bg-bolt-elements-bg-depth-1',
+                  'border border-bolt-elements-borderColor',
+                  'hover:bg-bolt-elements-item-backgroundAccent',
+                  'transition-all duration-200',
+                )}
+              >
+                <span
+                  className={classNames('text-lg', selectedLevelOption?.icon || 'i-ph:funnel')}
+                  style={{ color: selectedLevelOption?.color }}
+                />
+                {selectedLevelOption?.label || 'All Types'}
+                <span className="i-ph:caret-down text-lg text-bolt-elements-textTertiary" />
+              </button>
+            </DropdownMenu.Trigger>
+
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                className="min-w-[200px] bg-bolt-elements-bg-depth-1 rounded-lg shadow-lg py-1 z-[250] animate-in fade-in-0 zoom-in-95 border border-bolt-elements-borderColor"
+                sideOffset={5}
+                align="start"
+                side="bottom"
+              >
+                {logLevelOptions.map((option) => (
+                  <DropdownMenu.Item
+                    key={option.value}
+                    className="group flex items-center px-4 py-2.5 text-sm text-bolt-elements-textSecondary hover:bg-bolt-elements-item-backgroundAccent cursor-pointer transition-colors"
+                    onClick={() => handleLevelFilterChange(option.value)}
+                  >
+                    <div className="mr-3 flex h-5 w-5 items-center justify-center">
+                      <div
+                        className={classNames(
+                          option.icon,
+                          'text-lg group-hover:text-bolt-elements-item-contentAccent transition-colors',
+                        )}
+                        style={{ color: option.color }}
+                      />
+                    </div>
+                    <span className="group-hover:text-bolt-elements-item-contentAccent transition-colors">
+                      {option.label}
+                    </span>
+                  </DropdownMenu.Item>
+                ))}
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+
+          <div className="relative flex-1">
+            <input
+              type="text"
+              placeholder="Search logs..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className={classNames(
-                'flex items-center gap-2',
-                'rounded-lg px-3 py-1.5',
-                'text-sm text-gray-900 dark:text-white',
+                'w-full px-4 py-1.5 pl-10 rounded-lg',
                 'bg-bolt-elements-bg-depth-1',
                 'border border-bolt-elements-borderColor',
-                'hover:bg-purple-500/10 dark:hover:bg-purple-500/20',
+                'text-bolt-elements-textPrimary placeholder-bolt-elements-textTertiary',
+                'focus:outline-none focus:ring-2 focus:ring-bolt-elements-borderColorActive',
                 'transition-all duration-200',
+                'text-sm',
+              )}
+            />
+            <div className="absolute left-3 top-1/2 -translate-y-1/2">
+              <div className="i-ph:magnifying-glass text-lg text-bolt-elements-textTertiary" />
+            </div>
+          </div>
+        </div>
+
+        {/* Row 2: Toggles + Actions */}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={showTimestamps}
+                onCheckedChange={(value) => handlePreferenceChange('timestamps', value)}
+                className="data-[state=checked]:bg-bolt-elements-item-contentAccent"
+              />
+              <span className="text-sm text-bolt-elements-textTertiary">Timestamps</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={use24Hour}
+                onCheckedChange={(value) => handlePreferenceChange('24hour', value)}
+                className="data-[state=checked]:bg-bolt-elements-item-contentAccent"
+              />
+              <span className="text-sm text-bolt-elements-textTertiary">24h</span>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Switch
+                checked={autoExpand}
+                onCheckedChange={(value) => handlePreferenceChange('autoExpand', value)}
+                className="data-[state=checked]:bg-bolt-elements-item-contentAccent"
+              />
+              <span className="text-sm text-bolt-elements-textTertiary">Auto Expand</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleRefresh}
+              className={classNames(
+                'group flex items-center gap-2',
+                'rounded-lg px-3 py-1.5',
+                'text-sm text-bolt-elements-textPrimary',
+                'bg-bolt-elements-bg-depth-1',
+                'border border-bolt-elements-borderColor',
+                'hover:bg-bolt-elements-item-backgroundAccent',
+                'transition-all duration-200',
+                { 'animate-spin': isRefreshing },
               )}
             >
-              <span
-                className={classNames('text-lg', selectedLevelOption?.icon || 'i-ph:funnel')}
-                style={{ color: selectedLevelOption?.color }}
-              />
-              {selectedLevelOption?.label || 'All Types'}
-              <span className="i-ph:caret-down text-lg text-gray-500 dark:text-gray-400" />
+              <span className="i-ph:arrows-clockwise text-lg text-bolt-elements-textTertiary group-hover:text-bolt-elements-item-contentAccent transition-colors" />
+              Refresh
             </button>
-          </DropdownMenu.Trigger>
 
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content
-              className="min-w-[200px] bg-bolt-elements-bg-depth-1 rounded-lg shadow-lg py-1 z-[250] animate-in fade-in-0 zoom-in-95 border border-bolt-elements-borderColor"
-              sideOffset={5}
-              align="start"
-              side="bottom"
-            >
-              {logLevelOptions.map((option) => (
-                <DropdownMenu.Item
-                  key={option.value}
-                  className="group flex items-center px-4 py-2.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-purple-500/10 dark:hover:bg-purple-500/20 cursor-pointer transition-colors"
-                  onClick={() => handleLevelFilterChange(option.value)}
-                >
-                  <div className="mr-3 flex h-5 w-5 items-center justify-center">
-                    <div
-                      className={classNames(option.icon, 'text-lg group-hover:text-purple-500 transition-colors')}
-                      style={{ color: option.color }}
-                    />
-                  </div>
-                  <span className="group-hover:text-purple-500 transition-colors">{option.label}</span>
-                </DropdownMenu.Item>
-              ))}
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
-
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <Switch
-              checked={showTimestamps}
-              onCheckedChange={(value) => handlePreferenceChange('timestamps', value)}
-              className="data-[state=checked]:bg-purple-500"
-            />
-            <span className="text-sm text-gray-500 dark:text-gray-400">Show Timestamps</span>
+            <ExportButton />
           </div>
-
-          <div className="flex items-center gap-2">
-            <Switch
-              checked={use24Hour}
-              onCheckedChange={(value) => handlePreferenceChange('24hour', value)}
-              className="data-[state=checked]:bg-purple-500"
-            />
-            <span className="text-sm text-gray-500 dark:text-gray-400">24h Time</span>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Switch
-              checked={autoExpand}
-              onCheckedChange={(value) => handlePreferenceChange('autoExpand', value)}
-              className="data-[state=checked]:bg-purple-500"
-            />
-            <span className="text-sm text-gray-500 dark:text-gray-400">Auto Expand</span>
-          </div>
-
-          <div className="w-px h-4 bg-gray-200 dark:bg-gray-700" />
-
-          <button
-            onClick={handleRefresh}
-            className={classNames(
-              'group flex items-center gap-2',
-              'rounded-lg px-3 py-1.5',
-              'text-sm text-gray-900 dark:text-white',
-              'bg-bolt-elements-bg-depth-1',
-              'border border-bolt-elements-borderColor',
-              'hover:bg-purple-500/10 dark:hover:bg-purple-500/20',
-              'transition-all duration-200',
-              { 'animate-spin': isRefreshing },
-            )}
-          >
-            <span className="i-ph:arrows-clockwise text-lg text-gray-500 dark:text-gray-400 group-hover:text-purple-500 transition-colors" />
-            Refresh
-          </button>
-
-          <ExportButton />
         </div>
       </div>
 
-      <div className="flex flex-col gap-4">
-        <div className="relative">
-          <input
-            type="text"
-            placeholder="Search logs..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className={classNames(
-              'w-full px-4 py-2 pl-10 rounded-lg',
-              'bg-bolt-elements-bg-depth-1',
-              'border border-bolt-elements-borderColor',
-              'text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400',
-              'focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500',
-              'transition-all duration-200',
-            )}
-          />
-          <div className="absolute left-3 top-1/2 -translate-y-1/2">
-            <div className="i-ph:magnifying-glass text-lg text-gray-500 dark:text-gray-400" />
-          </div>
-        </div>
-
+      <div className="flex flex-col gap-2">
         {filteredLogs.length === 0 ? (
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -993,10 +1005,10 @@ export function EventLogsTab() {
               'border border-bolt-elements-borderColor',
             )}
           >
-            <span className="i-ph:clipboard-text text-4xl text-gray-400 dark:text-gray-600" />
+            <span className="i-ph:clipboard-text text-4xl text-bolt-elements-textTertiary" />
             <div className="flex flex-col gap-1">
-              <h3 className="text-sm font-medium text-gray-900 dark:text-white">No Logs Found</h3>
-              <p className="text-sm text-gray-500 dark:text-gray-400">Try adjusting your search or filters</p>
+              <h3 className="text-sm font-medium text-bolt-elements-textPrimary">No Logs Found</h3>
+              <p className="text-sm text-bolt-elements-textSecondary">Try adjusting your search or filters</p>
             </div>
           </motion.div>
         ) : (

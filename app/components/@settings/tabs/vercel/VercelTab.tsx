@@ -94,56 +94,6 @@ export default function VercelTab() {
         },
       },
       {
-        name: 'View Deployments',
-        icon: 'i-ph:rocket',
-        action: async (projectId: string) => {
-          window.open(`https://vercel.com/dashboard/${projectId}/deployments`, '_blank', 'noopener,noreferrer');
-        },
-      },
-      {
-        name: 'View Functions',
-        icon: 'i-ph:code',
-        action: async (projectId: string) => {
-          window.open(`https://vercel.com/dashboard/${projectId}/functions`, '_blank', 'noopener,noreferrer');
-        },
-      },
-      {
-        name: 'View Analytics',
-        icon: 'i-ph:chart-bar',
-        action: async (projectId: string) => {
-          const project = connection.stats?.projects.find((p) => p.id === projectId);
-
-          if (project) {
-            window.open(
-              `https://vercel.com/${connection.user?.username}/${project.name}/analytics`,
-              '_blank',
-              'noopener,noreferrer',
-            );
-          }
-        },
-      },
-      {
-        name: 'View Domains',
-        icon: 'i-ph:globe',
-        action: async (projectId: string) => {
-          window.open(`https://vercel.com/dashboard/${projectId}/domains`, '_blank', 'noopener,noreferrer');
-        },
-      },
-      {
-        name: 'View Settings',
-        icon: 'i-ph:gear',
-        action: async (projectId: string) => {
-          window.open(`https://vercel.com/dashboard/${projectId}/settings`, '_blank', 'noopener,noreferrer');
-        },
-      },
-      {
-        name: 'View Logs',
-        icon: 'i-ph:scroll',
-        action: async (projectId: string) => {
-          window.open(`https://vercel.com/dashboard/${projectId}/logs`, '_blank', 'noopener,noreferrer');
-        },
-      },
-      {
         name: 'Delete Project',
         icon: 'i-ph:trash',
         action: async (projectId: string) => {
@@ -312,221 +262,69 @@ export default function VercelTab() {
         </CollapsibleTrigger>
         <CollapsibleContent className="overflow-hidden">
           <div className="space-y-4 mt-4">
-            {/* Vercel Overview Dashboard */}
+            {/* Consolidated Overview */}
             {connection.stats?.projects?.length ? (
-              <div className="mb-6 p-4 bg-bolt-elements-background-depth-1 rounded-lg border border-bolt-elements-borderColor">
-                <h4 className="text-sm font-medium text-bolt-elements-textPrimary mb-3">Vercel Overview</h4>
-                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-bolt-elements-textPrimary">
+              <div className="mb-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div className="bg-bolt-elements-background-depth-2 border border-bolt-elements-borderColor rounded-lg p-3">
+                    <div className="text-lg font-semibold text-bolt-elements-textPrimary">
                       {connection.stats.totalProjects}
                     </div>
                     <div className="text-xs text-bolt-elements-textSecondary">Total Projects</div>
                   </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-bolt-elements-textPrimary">
-                      {
-                        connection.stats.projects.filter(
-                          (p) => p.targets?.production?.alias && p.targets.production.alias.length > 0,
-                        ).length
-                      }
-                    </div>
-                    <div className="text-xs text-bolt-elements-textSecondary">Deployed Projects</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-bolt-elements-textPrimary">
-                      {new Set(connection.stats.projects.map((p) => p.framework).filter(Boolean)).size}
-                    </div>
-                    <div className="text-xs text-bolt-elements-textSecondary">Frameworks Used</div>
-                  </div>
-                  <div className="text-center">
-                    <div className="text-2xl font-bold text-bolt-elements-textPrimary">
+                  <div className="bg-bolt-elements-background-depth-2 border border-bolt-elements-borderColor rounded-lg p-3">
+                    <div className="text-lg font-semibold text-bolt-elements-textPrimary">
                       {connection.stats.projects.filter((p) => p.latestDeployments?.[0]?.state === 'READY').length}
                     </div>
-                    <div className="text-xs text-bolt-elements-textSecondary">Active Deployments</div>
+                    <div className="text-xs text-bolt-elements-textSecondary">Live (READY)</div>
+                  </div>
+                  <div className="bg-bolt-elements-background-depth-2 border border-bolt-elements-borderColor rounded-lg p-3">
+                    <div className="text-lg font-semibold text-bolt-elements-textPrimary">
+                      {new Set(connection.stats.projects.map((p) => p.framework).filter(Boolean)).size}
+                    </div>
+                    <div className="text-xs text-bolt-elements-textSecondary">Frameworks</div>
+                  </div>
+                  <div className="bg-bolt-elements-background-depth-2 border border-bolt-elements-borderColor rounded-lg p-3">
+                    <div className="text-lg font-semibold text-bolt-elements-textPrimary">
+                      {connection.stats.projects.reduce(
+                        (sum, p) => sum + (p.targets?.production?.alias ? p.targets.production.alias.length : 0),
+                        0,
+                      )}
+                    </div>
+                    <div className="text-xs text-bolt-elements-textSecondary">Domains</div>
                   </div>
                 </div>
-              </div>
-            ) : null}
+                {/* Alert bar for errors or building projects */}
+                {(() => {
+                  const errorCount = connection.stats.projects.filter(
+                    (p) =>
+                      p.latestDeployments?.[0]?.state === 'ERROR' || p.latestDeployments?.[0]?.state === 'CANCELED',
+                  ).length;
+                  const buildingCount = connection.stats.projects.filter(
+                    (p) => p.latestDeployments?.[0]?.state === 'BUILDING',
+                  ).length;
 
-            {/* Performance Analytics */}
-            {connection.stats?.projects?.length ? (
-              <div className="mb-6 space-y-4">
-                <h4 className="text-sm font-medium text-bolt-elements-textPrimary">Performance Analytics</h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div className="bg-bolt-elements-background-depth-2 p-3 rounded-lg border border-bolt-elements-borderColor">
-                    <h6 className="text-xs font-medium text-bolt-elements-textPrimary flex items-center gap-2 mb-2">
-                      <div className="i-ph:rocket w-4 h-4 text-bolt-elements-item-contentAccent" />
-                      Deployment Health
-                    </h6>
-                    <div className="space-y-1">
-                      {(() => {
-                        const totalDeployments = connection.stats.projects.reduce(
-                          (sum, p) => sum + (p.latestDeployments?.length || 0),
-                          0,
-                        );
-                        const readyDeployments = connection.stats.projects.filter(
-                          (p) => p.latestDeployments?.[0]?.state === 'READY',
-                        ).length;
-                        const errorDeployments = connection.stats.projects.filter(
-                          (p) => p.latestDeployments?.[0]?.state === 'ERROR',
-                        ).length;
-                        const successRate =
-                          totalDeployments > 0
-                            ? Math.round((readyDeployments / connection.stats.projects.length) * 100)
-                            : 0;
+                  if (errorCount === 0 && buildingCount === 0) {
+                    return null;
+                  }
 
-                        return [
-                          { label: 'Success Rate', value: `${successRate}%` },
-                          { label: 'Active', value: readyDeployments },
-                          { label: 'Failed', value: errorDeployments },
-                        ];
-                      })().map((item, idx) => (
-                        <div key={idx} className="flex justify-between text-xs">
-                          <span className="text-bolt-elements-textSecondary">{item.label}:</span>
-                          <span className="text-bolt-elements-textPrimary font-medium">{item.value}</span>
-                        </div>
-                      ))}
+                  return (
+                    <div className="mt-3 flex items-center gap-3 px-3 py-2 rounded-lg bg-bolt-elements-background-depth-2 border border-bolt-elements-borderColor text-xs text-bolt-elements-textSecondary">
+                      {errorCount > 0 && (
+                        <span className="flex items-center gap-1 text-red-500">
+                          <div className="i-ph:warning w-3.5 h-3.5" />
+                          {errorCount} {errorCount === 1 ? 'project' : 'projects'} with errors
+                        </span>
+                      )}
+                      {buildingCount > 0 && (
+                        <span className="flex items-center gap-1 text-yellow-500">
+                          <div className="i-ph:gear w-3.5 h-3.5 animate-spin" />
+                          {buildingCount} building
+                        </span>
+                      )}
                     </div>
-                  </div>
-
-                  <div className="bg-bolt-elements-background-depth-2 p-3 rounded-lg border border-bolt-elements-borderColor">
-                    <h6 className="text-xs font-medium text-bolt-elements-textPrimary flex items-center gap-2 mb-2">
-                      <div className="i-ph:chart-bar w-4 h-4 text-bolt-elements-item-contentAccent" />
-                      Framework Distribution
-                    </h6>
-                    <div className="space-y-1">
-                      {(() => {
-                        const frameworks = connection.stats.projects.reduce(
-                          (acc, p) => {
-                            if (p.framework) {
-                              acc[p.framework] = (acc[p.framework] || 0) + 1;
-                            }
-
-                            return acc;
-                          },
-                          {} as Record<string, number>,
-                        );
-
-                        return Object.entries(frameworks)
-                          .sort(([, a], [, b]) => b - a)
-                          .slice(0, 3)
-                          .map(([framework, count]) => ({ label: framework, value: count }));
-                      })().map((item, idx) => (
-                        <div key={idx} className="flex justify-between text-xs">
-                          <span className="text-bolt-elements-textSecondary">{item.label}:</span>
-                          <span className="text-bolt-elements-textPrimary font-medium">{item.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-
-                  <div className="bg-bolt-elements-background-depth-2 p-3 rounded-lg border border-bolt-elements-borderColor">
-                    <h6 className="text-xs font-medium text-bolt-elements-textPrimary flex items-center gap-2 mb-2">
-                      <div className="i-ph:activity w-4 h-4 text-bolt-elements-item-contentAccent" />
-                      Activity Summary
-                    </h6>
-                    <div className="space-y-1">
-                      {(() => {
-                        const now = Date.now();
-                        const recentDeployments = connection.stats.projects.filter((p) => {
-                          const lastDeploy = p.latestDeployments?.[0]?.created;
-                          return lastDeploy && now - new Date(lastDeploy).getTime() < 7 * 24 * 60 * 60 * 1000;
-                        }).length;
-                        const totalDomains = connection.stats.projects.reduce(
-                          (sum, p) => sum + (p.targets?.production?.alias ? p.targets.production.alias.length : 0),
-                          0,
-                        );
-                        const avgDomainsPerProject =
-                          connection.stats.projects.length > 0
-                            ? Math.round((totalDomains / connection.stats.projects.length) * 10) / 10
-                            : 0;
-
-                        return [
-                          { label: 'Recent deploys', value: recentDeployments },
-                          { label: 'Total domains', value: totalDomains },
-                          { label: 'Avg domains/project', value: avgDomainsPerProject },
-                        ];
-                      })().map((item, idx) => (
-                        <div key={idx} className="flex justify-between text-xs">
-                          <span className="text-bolt-elements-textSecondary">{item.label}:</span>
-                          <span className="text-bolt-elements-textPrimary font-medium">{item.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {/* Project Health Overview */}
-            {connection.stats?.projects?.length ? (
-              <div className="mb-6">
-                <h4 className="text-sm font-medium text-bolt-elements-textPrimary mb-2">Project Health Overview</h4>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {(() => {
-                    const healthyProjects = connection.stats.projects.filter(
-                      (p) =>
-                        p.latestDeployments?.[0]?.state === 'READY' && (p.targets?.production?.alias?.length ?? 0) > 0,
-                    ).length;
-                    const needsAttention = connection.stats.projects.filter(
-                      (p) =>
-                        p.latestDeployments?.[0]?.state === 'ERROR' || p.latestDeployments?.[0]?.state === 'CANCELED',
-                    ).length;
-                    const withCustomDomain = connection.stats.projects.filter((p) =>
-                      p.targets?.production?.alias?.some((alias: string) => !alias.includes('.vercel.app')),
-                    ).length;
-                    const buildingProjects = connection.stats.projects.filter(
-                      (p) => p.latestDeployments?.[0]?.state === 'BUILDING',
-                    ).length;
-
-                    return [
-                      {
-                        label: 'Healthy',
-                        value: healthyProjects,
-                        icon: 'i-ph:check-circle',
-                        color: 'text-green-500',
-                        bgColor: 'bg-green-100 dark:bg-green-900/20',
-                        textColor: 'text-green-800 dark:text-green-400',
-                      },
-                      {
-                        label: 'Custom Domain',
-                        value: withCustomDomain,
-                        icon: 'i-ph:globe',
-                        color: 'text-blue-500',
-                        bgColor: 'bg-blue-100 dark:bg-blue-900/20',
-                        textColor: 'text-blue-800 dark:text-blue-400',
-                      },
-                      {
-                        label: 'Building',
-                        value: buildingProjects,
-                        icon: 'i-ph:gear',
-                        color: 'text-yellow-500',
-                        bgColor: 'bg-yellow-100 dark:bg-yellow-900/20',
-                        textColor: 'text-yellow-800 dark:text-yellow-400',
-                      },
-                      {
-                        label: 'Issues',
-                        value: needsAttention,
-                        icon: 'i-ph:warning',
-                        color: 'text-red-500',
-                        bgColor: 'bg-red-100 dark:bg-red-900/20',
-                        textColor: 'text-red-800 dark:text-red-400',
-                      },
-                    ];
-                  })().map((metric, index) => (
-                    <div
-                      key={index}
-                      className={`flex flex-col p-3 rounded-lg border border-bolt-elements-borderColor ${metric.bgColor}`}
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className={`${metric.icon} w-4 h-4 ${metric.color}`} />
-                        <span className="text-xs text-bolt-elements-textSecondary">{metric.label}</span>
-                      </div>
-                      <span className={`text-lg font-medium ${metric.textColor}`}>{metric.value}</span>
-                    </div>
-                  ))}
-                </div>
+                  );
+                })()}
               </div>
             ) : null}
 
@@ -579,50 +377,6 @@ export default function VercelTab() {
                               </span>
                             </>
                           ) : null}
-                        </div>
-
-                        {/* Project Details Grid */}
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mt-3 pt-3 border-t border-bolt-elements-borderColor">
-                          <div className="text-center">
-                            <div className="text-sm font-semibold text-bolt-elements-textPrimary">
-                              {/* Deployments - This would be fetched from API */}
-                              --
-                            </div>
-                            <div className="text-xs text-bolt-elements-textSecondary flex items-center justify-center gap-1">
-                              <div className="i-ph:rocket w-3 h-3" />
-                              Deployments
-                            </div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-sm font-semibold text-bolt-elements-textPrimary">
-                              {/* Domains - This would be fetched from API */}
-                              --
-                            </div>
-                            <div className="text-xs text-bolt-elements-textSecondary flex items-center justify-center gap-1">
-                              <div className="i-ph:globe w-3 h-3" />
-                              Domains
-                            </div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-sm font-semibold text-bolt-elements-textPrimary">
-                              {/* Team Members - This would be fetched from API */}
-                              --
-                            </div>
-                            <div className="text-xs text-bolt-elements-textSecondary flex items-center justify-center gap-1">
-                              <div className="i-ph:users w-3 h-3" />
-                              Team
-                            </div>
-                          </div>
-                          <div className="text-center">
-                            <div className="text-sm font-semibold text-bolt-elements-textPrimary">
-                              {/* Bandwidth - This would be fetched from API */}
-                              --
-                            </div>
-                            <div className="text-xs text-bolt-elements-textSecondary flex items-center justify-center gap-1">
-                              <div className="i-ph:activity w-3 h-3" />
-                              Bandwidth
-                            </div>
-                          </div>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">

@@ -36,7 +36,7 @@ const ProjectMemoryTab = lazy(() => import('~/components/@settings/tabs/project-
 // Loading fallback for lazy-loaded tabs
 const TabLoadingFallback = () => (
   <div className="flex items-center justify-center h-64">
-    <div className="animate-spin w-8 h-8 border-2 border-purple-500 border-t-transparent rounded-full" />
+    <div className="animate-spin w-8 h-8 border-2 border-bolt-elements-item-contentAccent border-t-transparent rounded-full" />
   </div>
 );
 
@@ -272,7 +272,7 @@ export const ControlPanel = ({ open, onClose, initialTab }: ControlPanelProps) =
                           className={classNames(
                             'w-full flex items-center gap-3 px-4 py-2 text-left text-sm transition-colors duration-150',
                             isActive
-                              ? 'text-bolt-elements-textPrimary border-l-2 border-purple-500'
+                              ? 'text-bolt-elements-textPrimary border-l-2 border-bolt-elements-item-contentAccent'
                               : 'text-bolt-elements-textSecondary hover:text-bolt-elements-textPrimary border-l-2 border-transparent',
                           )}
                           style={{
@@ -282,9 +282,11 @@ export const ControlPanel = ({ open, onClose, initialTab }: ControlPanelProps) =
                         >
                           <IconComponent className="w-4 h-4 shrink-0" />
                           <span className="truncate">{TAB_LABELS[tabId]}</span>
-                          {hasUpdate && <span className="ml-auto w-2 h-2 rounded-full bg-purple-500 shrink-0" />}
+                          {hasUpdate && (
+                            <span className="ml-auto w-2 h-2 rounded-full bg-bolt-elements-item-contentAccent shrink-0" />
+                          )}
                           {BETA_TABS.has(tabId) && (
-                            <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-purple-500/20 text-purple-400 shrink-0">
+                            <span className="ml-auto text-[10px] px-1.5 py-0.5 rounded bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent shrink-0">
                               BETA
                             </span>
                           )}

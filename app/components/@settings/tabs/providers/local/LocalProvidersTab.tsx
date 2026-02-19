@@ -311,11 +311,11 @@ export default function LocalProvidersTab() {
               <div
                 className="w-12 h-12 rounded-xl flex items-center justify-center"
                 style={{
-                  background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.2), rgba(59, 130, 246, 0.2))',
-                  boxShadow: '0 0 0 1px rgba(139, 92, 246, 0.3)',
+                  background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.2), rgba(59, 130, 246, 0.2))',
+                  boxShadow: '0 0 0 1px rgba(6, 182, 212, 0.3)',
                 }}
               >
-                <div className="i-ph:cpu w-6 h-6 text-purple-500" />
+                <div className="i-ph:cpu w-6 h-6 text-bolt-elements-item-contentAccent" />
               </div>
               <div>
                 <h2 className="text-2xl font-semibold text-white">Local AI Providers</h2>
@@ -363,7 +363,7 @@ export default function LocalProvidersTab() {
                     <CardHeader className="pb-3">
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
-                          <div className="i-ph:package w-5 h-5 text-purple-500" />
+                          <div className="i-ph:package w-5 h-5 text-bolt-elements-item-contentAccent" />
                           <h3 className="text-lg font-semibold text-bolt-elements-textPrimary">Installed Models</h3>
                         </div>
                         <Button
@@ -401,7 +401,7 @@ export default function LocalProvidersTab() {
                               href="https://ollama.com/library"
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-purple-500 hover:underline inline-flex items-center gap-1"
+                              className="text-bolt-elements-item-contentAccent hover:underline inline-flex items-center gap-1"
                             >
                               ollama.com/library
                               <div className="i-ph:arrow-square-out w-3 h-3" />
@@ -411,7 +411,7 @@ export default function LocalProvidersTab() {
                           <Button
                             variant="outline"
                             size="sm"
-                            className="bg-gradient-to-r from-purple-500/8 to-purple-600/8 hover:from-purple-500/15 hover:to-purple-600/15 border-purple-500/25 hover:border-purple-500/40 transition-all duration-300 gap-2 group shadow-sm hover:shadow-md font-medium"
+                            className="bg-gradient-to-r from-[#06B6D4]/8 to-[#06B6D4]/8 hover:from-[#06B6D4]/15 hover:to-[#06B6D4]/15 border-bolt-elements-borderColorActive/25 hover:border-bolt-elements-borderColorActive/40 transition-all duration-300 gap-2 group shadow-sm hover:shadow-md font-medium"
                             _asChild
                           >
                             <a

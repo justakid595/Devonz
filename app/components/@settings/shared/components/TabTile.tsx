@@ -25,7 +25,7 @@ export const TabTile = memo(
         <Tooltip.Root>
           <Tooltip.Trigger asChild>
             <div className={classNames('min-h-[160px] list-none', className || '')}>
-              <div className="relative h-full rounded-xl border border-bolt-elements-borderColor hover:border-purple-300 dark:hover:border-purple-800/50 transition-colors duration-150">
+              <div className="relative h-full rounded-xl border border-bolt-elements-borderColor hover:border-bolt-elements-borderColorActive/30 transition-colors duration-150">
                 <div
                   onClick={onClick}
                   className={classNames(
@@ -34,7 +34,7 @@ export const TabTile = memo(
                     'group cursor-pointer',
                     'hover:bg-bolt-elements-bg-depth-2',
                     'transition-colors duration-150',
-                    isActive ? 'bg-purple-500/5 dark:bg-purple-500/10' : '',
+                    isActive ? 'bg-bolt-elements-item-backgroundAccent' : '',
                     isLoading ? 'cursor-wait opacity-70 pointer-events-none' : '',
                   )}
                 >
@@ -47,21 +47,19 @@ export const TabTile = memo(
                       'rounded-xl',
                       'bg-gray-100 dark:bg-gray-800',
                       'ring-1 ring-gray-200 dark:ring-gray-700',
-                      'group-hover:bg-purple-100 dark:group-hover:bg-gray-700/80',
-                      'group-hover:ring-purple-200 dark:group-hover:ring-purple-800/30',
+                      'group-hover:bg-bolt-elements-item-backgroundAccent',
+                      'group-hover:ring-bolt-elements-borderColorActive/30',
                       'transition-colors duration-150',
-                      isActive
-                        ? 'bg-purple-500/10 dark:bg-purple-500/10 ring-purple-500/30 dark:ring-purple-500/20'
-                        : '',
+                      isActive ? 'bg-bolt-elements-item-backgroundAccent ring-bolt-elements-borderColorActive/30' : '',
                     )}
                   >
                     <IconComponent
                       className={classNames(
                         'w-8 h-8',
                         'text-gray-600 dark:text-gray-300',
-                        'group-hover:text-purple-500 dark:group-hover:text-purple-400/80',
+                        'group-hover:text-bolt-elements-item-contentAccent',
                         'transition-colors duration-150',
-                        isActive ? 'text-purple-500 dark:text-purple-400/90' : '',
+                        isActive ? 'text-bolt-elements-item-contentAccent' : '',
                       )}
                     />
                   </div>
@@ -72,9 +70,9 @@ export const TabTile = memo(
                       className={classNames(
                         'text-[15px] font-medium leading-snug mb-2',
                         'text-gray-700 dark:text-gray-200',
-                        'group-hover:text-purple-600 dark:group-hover:text-purple-300/90',
+                        'group-hover:text-bolt-elements-item-contentAccent',
                         'transition-colors duration-150',
-                        isActive ? 'text-purple-500 dark:text-purple-400/90' : '',
+                        isActive ? 'text-bolt-elements-item-contentAccent' : '',
                       )}
                     >
                       {TAB_LABELS[tab.id]}
@@ -86,9 +84,9 @@ export const TabTile = memo(
                           'text-gray-500 dark:text-gray-400',
                           'max-w-[85%]',
                           'text-center',
-                          'group-hover:text-purple-500 dark:group-hover:text-purple-400/70',
+                          'group-hover:text-bolt-elements-item-contentAccent',
                           'transition-colors duration-150',
-                          isActive ? 'text-purple-400 dark:text-purple-400/80' : '',
+                          isActive ? 'text-bolt-elements-item-contentAccent' : '',
                         )}
                       >
                         {description}
@@ -99,7 +97,7 @@ export const TabTile = memo(
                   {/* Update Indicator with Tooltip */}
                   {hasUpdate && (
                     <>
-                      <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-purple-500 dark:bg-purple-400 animate-pulse" />
+                      <div className="absolute top-4 right-4 w-2 h-2 rounded-full bg-bolt-elements-item-contentAccent animate-pulse" />
                       <Tooltip.Portal>
                         <Tooltip.Content
                           className={classNames(
