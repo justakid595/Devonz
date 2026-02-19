@@ -211,13 +211,29 @@ export async function streamText(props: {
     systemPrompt = `${systemPrompt}
 
 <plan_mode>
-PLANNING MODE IS ACTIVE. Before making any code changes you MUST:
-1. Create or update a PLAN.md file in the project root with a concise, actionable checklist of steps.
-2. Each step should be a checkbox item: \`- [ ] Step description\`
-3. Mark completed steps as \`- [x] Step description\` as you progress.
-4. Keep the plan scoped to the current request — avoid sprawling roadmaps.
-5. After PLAN.md exists and is up to date, proceed with the implementation.
-6. Update PLAN.md as each step is completed.
+## CRITICAL: PLANNING MODE IS ACTIVE — YOU MUST FOLLOW THESE RULES
+
+**YOUR VERY FIRST ACTION** in EVERY response MUST be to create or update a file called \`PLAN.md\` in the project root (\`/home/project/PLAN.md\`).
+
+### Rules (NON-NEGOTIABLE):
+1. **FIRST artifact action = create/update PLAN.md** — BEFORE writing ANY other file, you MUST write PLAN.md with a markdown checklist of all steps needed.
+2. Each step MUST be a checkbox: \`- [ ] Step description\`
+3. After writing PLAN.md, proceed with implementation — creating/editing other files as needed.
+4. As you complete each step in the SAME response, update PLAN.md again to mark completed steps: \`- [x] Step description\`
+5. Keep the plan concise and scoped to the current request.
+6. If PLAN.md already exists from a previous message, read it first, then update it with any new steps and mark completed ones.
+
+### Example PLAN.md content:
+\`\`\`markdown
+# Plan
+
+- [x] Set up project structure
+- [x] Create main component
+- [ ] Add styling
+- [ ] Add tests
+\`\`\`
+
+**REMEMBER: The user explicitly requested Plan Mode. Your FIRST file action MUST be creating/updating PLAN.md. Do NOT skip this step.**
 </plan_mode>
 `;
   }
