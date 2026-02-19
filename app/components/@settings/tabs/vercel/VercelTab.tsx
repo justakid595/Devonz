@@ -90,21 +90,21 @@ export default function VercelTab() {
         name: 'View Dashboard',
         icon: 'i-ph:layout',
         action: async (projectId: string) => {
-          window.open(`https://vercel.com/dashboard/${projectId}`, '_blank');
+          window.open(`https://vercel.com/dashboard/${projectId}`, '_blank', 'noopener,noreferrer');
         },
       },
       {
         name: 'View Deployments',
         icon: 'i-ph:rocket',
         action: async (projectId: string) => {
-          window.open(`https://vercel.com/dashboard/${projectId}/deployments`, '_blank');
+          window.open(`https://vercel.com/dashboard/${projectId}/deployments`, '_blank', 'noopener,noreferrer');
         },
       },
       {
         name: 'View Functions',
         icon: 'i-ph:code',
         action: async (projectId: string) => {
-          window.open(`https://vercel.com/dashboard/${projectId}/functions`, '_blank');
+          window.open(`https://vercel.com/dashboard/${projectId}/functions`, '_blank', 'noopener,noreferrer');
         },
       },
       {
@@ -114,7 +114,11 @@ export default function VercelTab() {
           const project = connection.stats?.projects.find((p) => p.id === projectId);
 
           if (project) {
-            window.open(`https://vercel.com/${connection.user?.username}/${project.name}/analytics`, '_blank');
+            window.open(
+              `https://vercel.com/${connection.user?.username}/${project.name}/analytics`,
+              '_blank',
+              'noopener,noreferrer',
+            );
           }
         },
       },
@@ -122,21 +126,21 @@ export default function VercelTab() {
         name: 'View Domains',
         icon: 'i-ph:globe',
         action: async (projectId: string) => {
-          window.open(`https://vercel.com/dashboard/${projectId}/domains`, '_blank');
+          window.open(`https://vercel.com/dashboard/${projectId}/domains`, '_blank', 'noopener,noreferrer');
         },
       },
       {
         name: 'View Settings',
         icon: 'i-ph:gear',
         action: async (projectId: string) => {
-          window.open(`https://vercel.com/dashboard/${projectId}/settings`, '_blank');
+          window.open(`https://vercel.com/dashboard/${projectId}/settings`, '_blank', 'noopener,noreferrer');
         },
       },
       {
         name: 'View Logs',
         icon: 'i-ph:scroll',
         action: async (projectId: string) => {
-          window.open(`https://vercel.com/dashboard/${projectId}/logs`, '_blank');
+          window.open(`https://vercel.com/dashboard/${projectId}/logs`, '_blank', 'noopener,noreferrer');
         },
       },
       {
@@ -651,7 +655,9 @@ export default function VercelTab() {
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => window.open(`https://vercel.com/dashboard/${project.id}`, '_blank')}
+                          onClick={() =>
+                            window.open(`https://vercel.com/dashboard/${project.id}`, '_blank', 'noopener,noreferrer')
+                          }
                           className="flex items-center gap-1 text-bolt-elements-textPrimary dark:text-bolt-elements-textPrimary"
                         >
                           <div className="i-ph:arrow-square-out w-3 h-3" />

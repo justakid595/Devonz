@@ -758,7 +758,7 @@ export const Preview = memo(({ setSelectedElement }: PreviewProps) => {
   const openInNewTab = () => {
     // Use localPreviewUrl to match what's displayed in the address bar
     if (localPreviewUrl) {
-      window.open(localPreviewUrl, '_blank');
+      window.open(localPreviewUrl, '_blank', 'noopener,noreferrer');
     }
   };
 
@@ -1388,7 +1388,7 @@ Add these rules to style the elements as specified. The !important flags ensure 
                           window.open(
                             previewUrl,
                             `preview-${previewId}`,
-                            'width=1280,height=720,menubar=no,toolbar=no,location=no,status=no,resizable=yes',
+                            'width=1280,height=720,menubar=no,toolbar=no,location=no,status=no,resizable=yes,noopener,noreferrer',
                           );
                         }}
                       >
