@@ -19,6 +19,7 @@ import type { DesignScheme } from '~/types/design-scheme';
 import type { ElementInfo } from '~/components/workbench/Inspector';
 import { McpTools } from './MCPTools';
 import { WebSearch } from './WebSearch.client';
+import { ChatModeSelector } from './ChatModeSelector';
 
 interface ChatBoxProps {
   isModelSettingsCollapsed: boolean;
@@ -231,7 +232,13 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
             minHeight: props.TEXTAREA_MIN_HEIGHT,
             maxHeight: props.TEXTAREA_MAX_HEIGHT,
           }}
-          placeholder={props.chatMode === 'build' ? 'Ask Devonz to build...' : 'What would you like to discuss?'}
+          placeholder={
+            props.planMode
+              ? 'Describe what to plan...'
+              : props.chatMode === 'build'
+                ? 'Ask Devonz to build...'
+                : 'What would you like to discuss?'
+          }
           translate="no"
         />
         <ClientOnly>
@@ -257,21 +264,12 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
           <div className="flex gap-1 items-center">
             <ColorSchemeDialog designScheme={props.designScheme} setDesignScheme={props.setDesignScheme} />
             <McpTools />
-            <IconButton
-              title="Plan mode"
-              className={classNames(
-                'transition-all flex items-center gap-1 px-1.5',
-                props.planMode
-                  ? 'bg-bolt-elements-item-backgroundAccent text-bolt-elements-item-contentAccent'
-                  : 'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault',
-              )}
-              onClick={() => props.setPlanMode?.(!props.planMode)}
-            >
-              <>
-                <div className="i-ph:list-checks text-xl" />
-                {props.planMode && <span className="text-xs">Plan</span>}
-              </>
-            </IconButton>
+            <ChatModeSelector
+              chatMode={props.chatMode}
+              setChatMode={props.setChatMode}
+              planMode={props.planMode}
+              setPlanMode={props.setPlanMode}
+            />
             <IconButton title="Upload file" className="transition-all" onClick={() => props.handleFileUpload()}>
               <div className="i-ph:paperclip text-xl"></div>
             </IconButton>
@@ -298,23 +296,7 @@ export const ChatBox: React.FC<ChatBoxProps> = (props) => {
               onStop={props.stopListening}
               disabled={props.isStreaming}
             />
-            {props.chatStarted && (
-              <IconButton
-                title="Discuss"
-                className={classNames(
-                  'transition-all flex items-center gap-1 px-1.5',
-                  props.chatMode === 'discuss'
-                    ? '!bg-bolt-elements-item-backgroundAccent !text-bolt-elements-item-contentAccent'
-                    : 'bg-bolt-elements-item-backgroundDefault text-bolt-elements-item-contentDefault',
-                )}
-                onClick={() => {
-                  props.setChatMode?.(props.chatMode === 'discuss' ? 'build' : 'discuss');
-                }}
-              >
-                <div className={`i-ph:chats text-xl`} />
-                {props.chatMode === 'discuss' ? <span>Discuss</span> : <span />}
-              </IconButton>
-            )}
+
             {/* Model Selector Button with Dropdown */}
             <div className="relative">
               <IconButton
