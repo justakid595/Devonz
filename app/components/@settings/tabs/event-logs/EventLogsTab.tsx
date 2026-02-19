@@ -926,7 +926,7 @@ export function EventLogsTab() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className={classNames(
                 'w-full px-4 py-1.5 pl-10 rounded-lg',
-                'bg-bolt-elements-bg-depth-1',
+                'bg-bolt-elements-background-depth-1',
                 'border border-bolt-elements-borderColor',
                 'text-bolt-elements-textPrimary placeholder-bolt-elements-textTertiary',
                 'focus:outline-none focus:ring-2 focus:ring-bolt-elements-borderColorActive',

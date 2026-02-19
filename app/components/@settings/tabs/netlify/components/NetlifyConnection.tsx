@@ -919,7 +919,7 @@ export default function NetlifyConnection() {
               placeholder="Enter your Netlify API token"
               className={classNames(
                 'w-full px-3 py-2 rounded-lg text-sm',
-                'bg-bolt-elements-bg-depth-2',
+                'bg-bolt-elements-background-depth-1',
                 'border border-bolt-elements-borderColor',
                 'text-bolt-elements-textPrimary placeholder-bolt-elements-textTertiary',
                 'focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorActive',

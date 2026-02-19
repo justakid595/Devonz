@@ -176,7 +176,7 @@ export default function McpTab() {
               onChange={(e) => setMCPConfigText(e.target.value)}
               className={classNames(
                 'w-full px-3 py-2 rounded-lg text-sm font-mono h-72',
-                'bg-bolt-elements-bg-depth-2',
+                'bg-bolt-elements-background-depth-1',
                 'border',
                 error ? 'border-bolt-elements-icon-error' : 'border-bolt-elements-borderColor',
                 'text-bolt-elements-textPrimary',
@@ -197,7 +197,7 @@ export default function McpTab() {
               max="20"
               value={maxLLMSteps}
               onChange={(e) => handleMaxLLMCallChange(e.target.value)}
-              className="w-full px-3 py-2 text-bolt-elements-textPrimary text-sm rounded-lg bg-white dark:bg-bolt-elements-background-depth-4 border border-bolt-elements-borderColor dark:border-bolt-elements-borderColor-dark focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 text-bolt-elements-textPrimary text-sm rounded-lg bg-bolt-elements-background-depth-1 border border-bolt-elements-borderColor focus:outline-none focus:ring-1 focus:ring-bolt-elements-borderColorActive"
             />
           </div>
           <div className="mt-2 text-sm text-bolt-elements-textSecondary">

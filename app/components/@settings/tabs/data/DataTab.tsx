@@ -245,7 +245,7 @@ export function DataTab() {
               backgroundColor: activeSection === tab.id ? 'var(--bolt-elements-bg-depth-3)' : 'transparent',
               color:
                 activeSection === tab.id ? 'var(--bolt-elements-textPrimary)' : 'var(--bolt-elements-textTertiary)',
-              borderBottom: activeSection === tab.id ? '2px solid #a855f7' : '2px solid transparent',
+              borderBottom: activeSection === tab.id ? '2px solid #06B6D4' : '2px solid transparent',
             }}
           >
             {tab.label}
