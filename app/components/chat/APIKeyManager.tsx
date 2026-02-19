@@ -27,7 +27,11 @@ export function getApiKeysFromCookies() {
     parsedKeys = apiKeyMemoizeCache[storedApiKeys];
 
     if (!parsedKeys) {
-      parsedKeys = apiKeyMemoizeCache[storedApiKeys] = JSON.parse(storedApiKeys);
+      try {
+        parsedKeys = apiKeyMemoizeCache[storedApiKeys] = JSON.parse(storedApiKeys);
+      } catch {
+        parsedKeys = {};
+      }
     }
   }
 

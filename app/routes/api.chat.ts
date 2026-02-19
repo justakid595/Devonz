@@ -172,10 +172,21 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
   const useAgentMode = shouldUseAgentMode({ agentMode });
 
   const cookieHeader = request.headers.get('Cookie');
-  const apiKeys = JSON.parse(parseCookies(cookieHeader || '').apiKeys || '{}');
-  const providerSettings: Record<string, IProviderSetting> = JSON.parse(
-    parseCookies(cookieHeader || '').providers || '{}',
-  );
+
+  let apiKeys: Record<string, string> = {};
+  let providerSettings: Record<string, IProviderSetting> = {};
+
+  try {
+    apiKeys = JSON.parse(parseCookies(cookieHeader || '').apiKeys || '{}');
+  } catch {
+    // corrupted cookie — fall back to empty
+  }
+
+  try {
+    providerSettings = JSON.parse(parseCookies(cookieHeader || '').providers || '{}');
+  } catch {
+    // corrupted cookie — fall back to empty
+  }
 
   const stream = new SwitchableStream();
 
