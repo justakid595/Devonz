@@ -683,24 +683,28 @@ export class WorkbenchStore {
         await artifact.runner.runAction(data, isStreaming);
       }
 
-      this.#editorStore.updateFile(fullPath, data.action.content);
-
       /*
-       * CRITICAL: When staging is enabled, do NOT save to WebContainer here!
-       * The action-runner will stage the change, and WebContainer write happens on Accept.
-       * If we save here, the original content will be overwritten BEFORE staging captures it,
-       * causing Bug 1 (Reject All doesn't work) and Bug 2 (diff shows +0 -0).
+       * When staging is enabled, run the action BEFORE updating the editor so
+       * that action-runner reads the true original content from WebContainer
+       * for accurate diffs. Updating the editor first would cause the staging
+       * system to capture already-modified content as "original".
        */
       const stagingState = stagingStore.get();
       const isStagingEnabled = stagingState.settings.isEnabled;
 
-      if (!isStreaming && data.action.content && !isStagingEnabled) {
-        await this.saveFile(fullPath);
-      }
-
       if (!isStreaming) {
         await artifact.runner.runAction(data);
+
+        if (data.action.content && !isStagingEnabled) {
+          this.#editorStore.updateFile(fullPath, data.action.content);
+          await this.saveFile(fullPath);
+        } else {
+          this.#editorStore.updateFile(fullPath, data.action.content);
+        }
+
         this.resetAllFileModifications();
+      } else {
+        this.#editorStore.updateFile(fullPath, data.action.content);
       }
     } else {
       await artifact.runner.runAction(data);

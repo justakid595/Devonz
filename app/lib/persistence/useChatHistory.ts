@@ -65,6 +65,7 @@ export function useChatHistory() {
 
   /* Serialization lock to prevent concurrent storeMessageHistory calls which cause 'urlId' uniqueness constraint errors in IndexedDB */
   const isStoringRef = useRef(false);
+  const pendingMessagesRef = useRef<Message[] | null>(null);
 
   useEffect(() => {
     if (!db) {
@@ -356,16 +357,19 @@ export function useChatHistory() {
         logger.error(error);
       }
     },
-    storeMessageHistory: async (messages: Message[]) => {
+    storeMessageHistory: async function storeMessageHistory(messages: Message[]) {
       if (!db || messages.length === 0) {
         return;
       }
 
       /*
-       * Skip if another storeMessageHistory call is already in-flight.
-       * The 50ms sampler will try again with the latest messages.
+       * If a save is already in-flight, stash the latest messages so they
+       * are saved once the current write completes. This prevents data loss
+       * when storeMessageHistory is called rapidly during streaming.
        */
       if (isStoringRef.current) {
+        pendingMessagesRef.current = messages;
+
         return;
       }
 
@@ -375,23 +379,12 @@ export function useChatHistory() {
         const { firstArtifact } = workbenchStore;
         messages = messages.filter((m) => !m.annotations?.includes('no-store'));
 
-        /*
-         * Ensure chatId is set on the very first message.
-         * Always use a sequential numeric ID from getNextId() for consistency.
-         */
         if (initialMessages.length === 0 && !chatId.get()) {
           const nextId = await getNextId(db);
           chatId.set(nextId);
           versionsStore.setDBContext(db, nextId);
         }
 
-        /*
-         * Ensure urlId is set once and never changes.
-         * Derive it from the numeric chatId so URLs are always consistent
-         * (e.g. /chat/1, /chat/2) regardless of whether artifacts exist.
-         * Previously, artifact-based IDs like "2-1771470328283-0" were used
-         * when the AI generated artifacts, causing inconsistent URLs.
-         */
         let resolvedUrlId = urlId;
 
         if (!resolvedUrlId) {
@@ -418,7 +411,6 @@ export function useChatHistory() {
           }
         }
 
-        // Save params so debounced file-change subscriber can re-save with updated files
         lastSnapshotParamsRef.current = { chatIdx: messages[messages.length - 1].id, chatSummary };
 
         takeSnapshot(messages[messages.length - 1].id, workbenchStore.files.get(), resolvedUrlId, chatSummary);
@@ -427,7 +419,6 @@ export function useChatHistory() {
           description.set(firstArtifact?.title);
         }
 
-        // Ensure chatId.get() is used for the final setMessages call
         const finalChatId = chatId.get();
 
         if (!finalChatId) {
@@ -441,13 +432,20 @@ export function useChatHistory() {
           db,
           finalChatId,
           [...archivedMessages, ...messages],
-          resolvedUrlId, // Always use the resolved urlId, not stale useState
+          resolvedUrlId,
           description.get(),
           undefined,
           chatMetadata.get(),
         );
       } finally {
         isStoringRef.current = false;
+
+        const pending = pendingMessagesRef.current;
+
+        if (pending) {
+          pendingMessagesRef.current = null;
+          storeMessageHistory(pending);
+        }
       }
     },
     duplicateCurrentChat: async (listItemId: string) => {

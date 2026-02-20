@@ -5,6 +5,7 @@ import { isAllowedUrl } from '~/utils/url';
 import { createScopedLogger } from '~/utils/logger';
 
 const MAX_CONTENT_LENGTH = 8000;
+const MAX_RESPONSE_SIZE = 5 * 1024 * 1024; // 5 MB cap on raw response body
 const logger = createScopedLogger('WebSearch');
 
 const FETCH_HEADERS = {
@@ -81,7 +82,18 @@ async function webSearchAction({ request }: ActionFunctionArgs) {
       return json({ error: 'URL must point to an HTML or text page' }, { status: 400 });
     }
 
+    const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
+
+    if (contentLength > MAX_RESPONSE_SIZE) {
+      return json({ error: `Response too large (${contentLength} bytes). Maximum is ${MAX_RESPONSE_SIZE}.` }, { status: 413 });
+    }
+
     const html = await response.text();
+
+    if (html.length > MAX_RESPONSE_SIZE) {
+      return json({ error: 'Response body exceeds maximum allowed size.' }, { status: 413 });
+    }
+
     const title = extractTitle(html);
     const description = extractMetaDescription(html);
     const content = extractTextContent(html);

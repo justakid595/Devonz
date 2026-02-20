@@ -196,14 +196,12 @@ export class ActionRunner {
 
     this.#updateAction(actionId, { ...action, ...data.action, executed: !isStreaming });
 
-    this.#currentExecutionPromise = this.#currentExecutionPromise
-      .then(() => {
-        return this.#executeAction(actionId, isStreaming);
-      })
-      .catch((error) => {
-        logger.error('Action execution promise failed:', error);
+    this.#currentExecutionPromise = this.#currentExecutionPromise.then(async () => {
+      try {
+        await this.#executeAction(actionId, isStreaming);
+      } catch (error) {
+        logger.error('Action execution failed:', error);
 
-        // Surface the error to the user so they know what went wrong
         const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred';
 
         this.onAlert?.({
@@ -212,7 +210,8 @@ export class ActionRunner {
           description: errorMessage,
           content: error instanceof ActionCommandError ? error.output : undefined,
         });
-      });
+      }
+    });
 
     await this.#currentExecutionPromise;
 

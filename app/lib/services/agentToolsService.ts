@@ -51,15 +51,36 @@ async function getWorkbenchStore() {
  */
 
 /**
+ * Validate and normalize a filesystem path to prevent traversal outside the project.
+ * Rejects paths containing ".." segments that would escape the working directory.
+ */
+function validatePath(inputPath: string): { valid: true; normalized: string } | { valid: false; error: string } {
+  const segments = inputPath.replace(/\\/g, '/').split('/');
+
+  if (segments.some((s) => s === '..')) {
+    return { valid: false, error: `Path traversal not allowed: ${inputPath}` };
+  }
+
+  const normalized = segments.filter(Boolean).join('/');
+
+  return { valid: true, normalized: normalized.startsWith('/') ? normalized : `/${normalized}` };
+}
+
+/**
  * Read File Tool
  * Reads the contents of a file from the WebContainer filesystem.
  */
 async function readFile(params: ReadFileParams): Promise<ToolExecutionResult<ReadFileResult>> {
   const { path, startLine, endLine } = params;
+  const pathCheck = validatePath(path);
+
+  if (!pathCheck.valid) {
+    return { success: false, error: pathCheck.error };
+  }
 
   try {
     const container = await webcontainer;
-    const content = await container.fs.readFile(path, 'utf-8');
+    const content = await container.fs.readFile(pathCheck.normalized, 'utf-8');
     const lines = content.split('\n');
 
     // Handle line range if specified
@@ -102,29 +123,33 @@ async function readFile(params: ReadFileParams): Promise<ToolExecutionResult<Rea
  */
 async function writeFile(params: WriteFileParams): Promise<ToolExecutionResult<WriteFileResult>> {
   const { path, content } = params;
+  const pathCheck = validatePath(path);
+
+  if (!pathCheck.valid) {
+    return { success: false, error: pathCheck.error };
+  }
+
+  const safePath = pathCheck.normalized;
 
   try {
     const container = await webcontainer;
 
-    // Check if file exists to determine if this is a create or update
     let fileExists = false;
 
     try {
-      await container.fs.readFile(path, 'utf-8');
+      await container.fs.readFile(safePath, 'utf-8');
       fileExists = true;
     } catch {
       // File doesn't exist, will be created
     }
 
-    // Ensure parent directory exists
-    const parentDir = path.substring(0, path.lastIndexOf('/'));
+    const parentDir = safePath.substring(0, safePath.lastIndexOf('/'));
 
     if (parentDir) {
       await container.fs.mkdir(parentDir, { recursive: true });
     }
 
-    // Write the file
-    await container.fs.writeFile(path, content, 'utf-8');
+    await container.fs.writeFile(safePath, content, 'utf-8');
 
     logger.info(`Wrote file: ${path}`, {
       bytes: content.length,
@@ -157,6 +182,11 @@ async function writeFile(params: WriteFileParams): Promise<ToolExecutionResult<W
  */
 async function listDirectory(params: ListDirectoryParams): Promise<ToolExecutionResult<ListDirectoryResult>> {
   const { path = '/', recursive = false, maxDepth = 3 } = params;
+  const pathCheck = validatePath(path);
+
+  if (!pathCheck.valid) {
+    return { success: false, error: pathCheck.error };
+  }
 
   try {
     const container = await webcontainer;
@@ -187,9 +217,9 @@ async function listDirectory(params: ListDirectoryParams): Promise<ToolExecution
       }
     }
 
-    await traverse(path, 0);
+    await traverse(pathCheck.normalized, 0);
 
-    logger.debug(`Listed directory: ${path}`, {
+    logger.debug(`Listed directory: ${pathCheck.normalized}`, {
       entryCount: entries.length,
       recursive,
     });
@@ -235,11 +265,12 @@ async function runCommand(params: RunCommandParams): Promise<ToolExecutionResult
       };
     }
 
-    // Build the command with optional cwd
+    // Build the command with optional cwd (quote the path to handle spaces/metacharacters)
     let fullCommand = command;
 
     if (cwd) {
-      fullCommand = `cd ${cwd} && ${command}`;
+      const safeCwd = cwd.replace(/'/g, "'\\''");
+      fullCommand = `cd '${safeCwd}' && ${command}`;
     }
 
     logger.info(`Executing agent command: ${fullCommand}`);
@@ -508,35 +539,37 @@ async function deleteFile(params: {
   recursive?: boolean;
 }): Promise<ToolExecutionResult<{ path: string; deleted: boolean }>> {
   const { path, recursive = false } = params;
+  const pathCheck = validatePath(path);
+
+  if (!pathCheck.valid) {
+    return { success: false, error: pathCheck.error };
+  }
+
+  const safePath = pathCheck.normalized;
 
   try {
     const container = await webcontainer;
 
-    // Check if path exists and what type it is
     try {
-      const stat = await container.fs.readdir(path, { withFileTypes: true });
-
-      // If readdir succeeds, it's a directory
+      const stat = await container.fs.readdir(safePath, { withFileTypes: true });
 
       if (recursive) {
-        await container.fs.rm(path, { recursive: true });
+        await container.fs.rm(safePath, { recursive: true });
       } else {
-        // Check if directory is empty
         if (stat.length > 0) {
           return {
             success: false,
-            error: `Directory '${path}' is not empty. Use recursive: true to delete non-empty directories.`,
+            error: `Directory '${safePath}' is not empty. Use recursive: true to delete non-empty directories.`,
           };
         }
 
-        await container.fs.rm(path);
+        await container.fs.rm(safePath);
       }
     } catch {
-      // Not a directory, try to delete as file
-      await container.fs.rm(path);
+      await container.fs.rm(safePath);
     }
 
-    logger.info(`Deleted: ${path}`, { recursive });
+    logger.info(`Deleted: ${safePath}`, { recursive });
 
     return {
       success: true,

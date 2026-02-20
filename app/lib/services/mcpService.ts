@@ -110,6 +110,7 @@ export class MCPService {
   private _config: MCPConfig = {
     mcpServers: {},
   };
+  private _clientMutex: Promise<void> = Promise.resolve();
 
   static getInstance(): MCPService {
     if (!MCPService._instance) {
@@ -332,8 +333,27 @@ export class MCPService {
   }
 
   private async _createClients() {
-    await this._closeClients();
+    await this._withClientMutex(async () => {
+      await this._closeClientsUnsafe();
+      await this._createClientsUnsafe();
+    });
+  }
 
+  private async _withClientMutex(fn: () => Promise<void>) {
+    const prev = this._clientMutex;
+    let resolve!: () => void;
+    this._clientMutex = new Promise<void>((r) => (resolve = r));
+
+    await prev;
+
+    try {
+      await fn();
+    } finally {
+      resolve();
+    }
+  }
+
+  private async _createClientsUnsafe() {
     const createClientPromises = Object.entries(this._config?.mcpServers || []).map(async ([serverName, config]) => {
       let client: MCPClient | null = null;
 
@@ -428,6 +448,10 @@ export class MCPService {
   }
 
   private async _closeClients(): Promise<void> {
+    await this._withClientMutex(() => this._closeClientsUnsafe());
+  }
+
+  private async _closeClientsUnsafe(): Promise<void> {
     const closePromises = Object.entries(this._mcpToolsPerServer).map(async ([serverName, server]) => {
       if (!server.client) {
         return;
