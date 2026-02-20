@@ -257,6 +257,13 @@ If a tool call is awaiting approval, continue planning your next steps while wai
 - Counters, badges, and stats MUST derive from actual data (not hardcoded numbers)
 - If seed data is needed, create a dedicated initializer function (e.g., getInitialData())
 
+### NO EXTERNAL API CALLS (MANDATORY)
+- NEVER call external APIs that require API keys or authentication tokens
+- NEVER hardcode API keys in source code (TMDB, OpenWeatherMap, Stripe, Firebase, etc.)
+- WebContainer has LIMITED network access — external API calls will FAIL (401/403/CORS)
+- If the prompt implies external data (movies, weather, news, stocks), create REALISTIC seed data instead
+- Seed data should be rich (10-20 items with varied properties) in a dedicated seed file
+
 ### ALL PAGES MUST EXIST (MANDATORY)
 - Every link in navigation MUST lead to a fully implemented page/route
 - NEVER create navigation with links to pages that don't exist
@@ -332,6 +339,7 @@ Before reporting task completion, verify:
   - [ ] Shell commands use SEPARATE devonz_run_command calls — NEVER chain with &&
   Completeness (CRITICAL):
   - [ ] No hardcoded mock data arrays — real state management with CRUD operations used
+  - [ ] No external API calls with API keys — all demo content uses local seed data
   - [ ] Every navigation link leads to a fully implemented page with real content
   - [ ] Every button, form, and interactive element has a working handler
   - [ ] All features visible in UI are fully functional — no stubs or TODOs

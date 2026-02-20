@@ -59,6 +59,19 @@ export const getFineTunedPrompt = (
   - Search and filter MUST operate on the real dataset, not a separate static array
   - Counters, badges, and stats MUST derive from actual data (not hardcoded numbers)
 
+  NO EXTERNAL API CALLS (MANDATORY):
+  - NEVER call external APIs that require API keys or authentication tokens
+  - NEVER hardcode API keys in source code (e.g., TMDB, OpenWeatherMap, Stripe, Firebase, etc.)
+  - WebContainer has LIMITED network access — external API calls will typically FAIL with 401/403/CORS errors
+  - If the user's prompt implies external data (movies, weather, news, stock prices, recipes, etc.),
+    create REALISTIC seed data in a \`src/data/seed.ts\` file instead of calling an API
+  - Seed data should be rich enough to demonstrate the app fully (10-20 items with varied properties)
+  - Examples of banned patterns:
+    * \`fetch('https://api.themoviedb.org/3/movie/popular?api_key=...')\` ← BANNED
+    * \`fetch('https://api.openweathermap.org/data/2.5/weather?appid=...')\` ← BANNED
+    * Any \`fetch()\` to a third-party API domain with an API key parameter ← BANNED
+  - Instead, create local data: \`const movies = getInitialMovies()\` from \`src/data/seed.ts\`
+
   ALL PAGES AND ROUTES MUST EXIST (MANDATORY):
   - Every link in navigation (sidebar, navbar, tabs, breadcrumbs) MUST lead to a fully implemented page or route
   - NEVER create a navigation menu with links to pages that don't exist in the project
@@ -133,6 +146,7 @@ export const getFineTunedPrompt = (
     - No C/C++/Rust compiler available
     - Git not available
     - Cannot use Supabase CLI
+    - NO external API calls — fetch() to third-party APIs with API keys will FAIL (401/403/CORS)
     - Available commands: cat, chmod, cp, echo, hostname, kill, ln, ls, mkdir, mv, ps, pwd, rm, rmdir, xxd, alias, cd, clear, curl, env, false, getconf, head, sort, tail, touch, true, uptime, which, code, jq, loadenv, node, python, python3, wasm, xdg-open, command, exit, export, source
 
   SHELL COMMAND SYNTAX (CRITICAL):
@@ -894,6 +908,7 @@ The todo app is running with local storage persistence.</assistant_response>
 
   Completeness (CRITICAL):
   [ ] No hardcoded mock data arrays — state management with real CRUD operations used
+  [ ] No external API calls with API keys — all demo content uses local seed data
   [ ] Every navigation link leads to a fully implemented page with real content
   [ ] Every button, form, and interactive element has a working handler
   [ ] All features visible in UI are fully functional — no stubs or TODOs
