@@ -7,6 +7,7 @@ export interface ShowcaseTemplate {
   category: TemplateCategory;
   vercelUrl: string;
   githubRepo: string;
+  screenshotUrl?: string;
   tags: string[];
   icon: string;
 }

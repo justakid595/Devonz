@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from '@remix-run/react';
 import type { ShowcaseTemplate } from '~/types/showcase-template';
 
@@ -19,6 +19,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({ template, onClose }) => {
   const navigate = useNavigate();
   const overlayRef = useRef<HTMLDivElement>(null);
+  const [screenshotError, setScreenshotError] = useState(false);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -31,6 +32,10 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({ temp
 
     return () => document.removeEventListener('keydown', handleEscape);
   }, [onClose]);
+
+  useEffect(() => {
+    setScreenshotError(false);
+  }, [template]);
 
   if (!template) {
     return null;
@@ -49,6 +54,52 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({ temp
   const handleUseTemplate = () => {
     const gitUrl = `https://github.com/${template.githubRepo}.git`;
     navigate(`/git?url=${encodeURIComponent(gitUrl)}`);
+  };
+
+  const renderPreview = () => {
+    if (template.screenshotUrl && !screenshotError) {
+      return (
+        <div
+          className="w-full h-full flex items-center justify-center"
+          style={{ backgroundColor: '#0a0a0a', minHeight: '400px' }}
+        >
+          <img
+            src={template.screenshotUrl}
+            alt={`${template.name} preview`}
+            className="max-w-full max-h-full object-contain"
+            onError={() => setScreenshotError(true)}
+          />
+        </div>
+      );
+    }
+
+    return (
+      <div
+        className="w-full h-full flex flex-col items-center justify-center gap-6"
+        style={{ backgroundColor: '#0a0a0a', minHeight: '400px' }}
+      >
+        <div className={`${template.icon} text-5xl text-cyan-400`} />
+        <p className="text-lg font-medium text-white">{template.name}</p>
+        <p className="text-sm" style={{ color: '#9ca3af' }}>
+          Click &quot;Preview&quot; to view the live site in a new tab
+        </p>
+        <a
+          href={template.vercelUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1.5 text-sm font-medium transition-colors"
+          style={{ color: '#3b82f6' }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.color = '#60a5fa';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.color = '#3b82f6';
+          }}
+        >
+          Visit live site →
+        </a>
+      </div>
+    );
   };
 
   return (
@@ -90,15 +141,8 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({ temp
         </div>
 
         {/* Preview Area */}
-        <div className="flex-1 overflow-hidden" style={{ backgroundColor: '#0a0a0a' }}>
-          <iframe
-            src={template.vercelUrl}
-            title={`${template.name} preview`}
-            className="w-full h-full border-none"
-            style={{ minHeight: '400px' }}
-            sandbox="allow-scripts allow-same-origin allow-popups"
-            loading="lazy"
-          />
+        <div className="flex-1 overflow-hidden relative" style={{ backgroundColor: '#0a0a0a' }}>
+          {renderPreview()}
         </div>
 
         {/* Footer */}

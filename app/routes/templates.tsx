@@ -236,15 +236,34 @@ function TemplateGalleryCard({ template, onClick }: TemplateGalleryCardProps) {
     >
       {/* Preview Thumbnail */}
       <div className="relative aspect-[16/10] overflow-hidden" style={{ backgroundColor: '#0a0a0a' }}>
-        <iframe
-          src={template.vercelUrl}
-          title={`${template.name} preview`}
-          className="w-[200%] h-[200%] border-none origin-top-left pointer-events-none"
-          style={{ transform: 'scale(0.5)' }}
-          sandbox="allow-scripts allow-same-origin"
-          loading="lazy"
-          tabIndex={-1}
-        />
+        {template.screenshotUrl ? (
+          <img
+            src={template.screenshotUrl}
+            alt={`${template.name} preview`}
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              e.currentTarget.style.display = 'none';
+
+              const fallback = e.currentTarget.nextElementSibling as HTMLElement | null;
+
+              if (fallback) {
+                fallback.style.display = 'flex';
+              }
+            }}
+          />
+        ) : null}
+        <div
+          className="w-full h-full flex flex-col items-center justify-center gap-2 absolute inset-0"
+          style={{
+            backgroundColor: '#0a0a0a',
+            display: template.screenshotUrl ? 'none' : 'flex',
+          }}
+        >
+          <div className={`${template.icon} text-4xl text-cyan-400`} />
+          <span className="text-xs" style={{ color: '#9ca3af' }}>
+            Preview
+          </span>
+        </div>
         {/* Hover overlay */}
         <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-colors duration-300 flex items-center justify-center">
           <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium text-white bg-white/20 backdrop-blur-sm">

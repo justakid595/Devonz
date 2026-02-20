@@ -86,7 +86,7 @@ pnpm run dev
 - Netlify and Vercel one-click deploy
 - Supabase database integration
 - Git version control built-in
-- Template gallery for popular frameworks
+- Template gallery with category filtering, search, live preview, and one-click cloning
 
 ---
 

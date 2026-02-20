@@ -1,5 +1,15 @@
 [
   {
+    "id": "3d-product-explode",
+    "name": "3D Product Explode",
+    "description": "Interactive 3D product exploded view with Three.js animations",
+    "category": "landing-page",
+    "vercelUrl": "https://3d-product-explode.vercel.app",
+    "githubRepo": "devonz-templates/3d-product-explode",
+    "tags": ["3d", "threejs", "interactive", "product"],
+    "icon": "i-ph:cube-duotone"
+  },
+  {
     "id": "botanica-plant-shop",
     "name": "Botanica Plant Shop",
     "description": "Premium indoor plant shop with elegant product showcases",
