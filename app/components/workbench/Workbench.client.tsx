@@ -1,7 +1,7 @@
 import { useStore } from '@nanostores/react';
 import { motion, type HTMLMotionProps } from 'framer-motion';
 import { computed } from 'nanostores';
-import { memo, useCallback, useEffect, useState } from 'react';
+import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { toast } from 'react-toastify';
 import type { FileHistory } from '~/types/actions';
 import type { IChatMetadata } from '~/lib/persistence/db';
@@ -96,6 +96,26 @@ export const Workbench = memo(
     const streaming = useStore(streamingState);
     const { exportChat } = useChatHistory();
     const [isSyncing, setIsSyncing] = useState(false);
+
+    // Auto-refresh preview 2 seconds after LLM response completes
+    const prevStreamingRef = useRef(streaming);
+
+    useEffect(() => {
+      if (prevStreamingRef.current && !streaming) {
+        const timer = setTimeout(() => {
+          const previewStore = usePreviewStore();
+          previewStore.refreshAllPreviews();
+        }, 2000);
+
+        prevStreamingRef.current = streaming;
+
+        return () => clearTimeout(timer);
+      }
+
+      prevStreamingRef.current = streaming;
+
+      return undefined;
+    }, [streaming]);
 
     const setSelectedView = (view: WorkbenchViewType) => {
       workbenchStore.currentView.set(view);

@@ -54,6 +54,15 @@ const SHADCN_PEER_DEPS: Record<string, string> = {
   recharts: '^2.15.0',
 };
 
+/**
+ * Commonly used packages that LLMs frequently import.
+ * Pre-installed to avoid auto-fix loops caused by missing dependencies.
+ */
+const COMMON_EXTRA_PACKAGES: Record<string, string> = {
+  'framer-motion': '^11.15.0',
+  'lucide-react': '^0.460.0',
+};
+
 const starterTemplateSelectionPrompt = (templates: Template[]) => `
 You are an experienced developer who helps people choose the best starter template for their projects.
 IMPORTANT: Vite is preferred
@@ -229,10 +238,19 @@ function injectShadcnPeerDeps(files: Array<{ name: string; path: string; content
       }
     }
 
+    // Always pre-install commonly used packages that LLMs frequently import
+    // (e.g. framer-motion, lucide-react) to prevent auto-fix loops
+    for (const [pkg, version] of Object.entries(COMMON_EXTRA_PACKAGES)) {
+      if (!allExistingDeps[pkg] && !deps[pkg]) {
+        deps[pkg] = version;
+        injectedCount++;
+      }
+    }
+
     if (injectedCount > 0) {
       pkgJson.dependencies = deps;
       pkgJsonFile.content = JSON.stringify(pkgJson, null, 2);
-      logger.info(`Injected ${injectedCount} missing shadcn/ui peer dependencies into template package.json`);
+      logger.info(`Injected ${injectedCount} dependencies (peer deps + common packages) into template package.json`);
     }
   } catch (error) {
     logger.error('Failed to inject shadcn peer deps:', error);

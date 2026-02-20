@@ -584,12 +584,49 @@ export class ActionRunner {
        * from the existing file to prevent the LLM from accidentally dropping
        * critical deps (e.g. @radix-ui packages in shadcn templates).
        */
+      let oldDepsSnapshot: Record<string, string> | null = null;
+
       if (relativePath === 'package.json') {
+        // Snapshot existing deps BEFORE merge so we can detect new additions
+        try {
+          const existingContent = await webcontainer.fs.readFile(relativePath, 'utf-8');
+          const existingPkg = JSON.parse(existingContent);
+          oldDepsSnapshot = { ...(existingPkg.dependencies || {}), ...(existingPkg.devDependencies || {}) };
+        } catch {
+          // File doesn't exist yet — first write, npm install will run naturally
+        }
+
         contentToWrite = await this.#mergePackageJsonDeps(webcontainer, relativePath, action.content);
       }
 
       await webcontainer.fs.writeFile(relativePath, contentToWrite);
       logger.debug(`File written ${relativePath}`);
+
+      /*
+       * Auto-install: If package.json was written and dependencies changed,
+       * automatically run `npm install` so new packages are actually available.
+       * This prevents auto-fix loops where the LLM adds a dep to package.json
+       * but the error persists because the package was never installed.
+       */
+      if (relativePath === 'package.json' && oldDepsSnapshot) {
+        try {
+          const newPkg = JSON.parse(contentToWrite);
+          const newAllDeps = { ...(newPkg.dependencies || {}), ...(newPkg.devDependencies || {}) };
+
+          const hasNewDeps = Object.keys(newAllDeps).some((pkg) => !oldDepsSnapshot![pkg]);
+
+          if (hasNewDeps) {
+            logger.info('package.json dependencies changed, running npm install...');
+
+            const shell = this.#shellTerminal();
+            await shell.ready();
+            await shell.executeCommand(this.runnerId.get(), 'npm install --legacy-peer-deps', () => {});
+            logger.info('npm install completed after package.json update');
+          }
+        } catch (installError) {
+          logger.error('Failed to auto-install after package.json update:', installError);
+        }
+      }
     } catch (error) {
       logger.error('Failed to write file\n\n', error);
     }

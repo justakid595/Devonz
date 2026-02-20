@@ -41,7 +41,7 @@ import {
   unregisterPreviewAutoFixCallback,
 } from '~/utils/previewErrorHandler';
 import { createAutoFixHandler, handleFixSuccess, isAutoFixActive } from '~/lib/services/autoFixService';
-import { autoFixStore, recordFixAttempt } from '~/lib/stores/autofix';
+import { autoFixStore, hasExceededMaxRetries, recordFixAttempt } from '~/lib/stores/autofix';
 import { planActionAtom, clearPlanAction } from '~/lib/stores/plan';
 
 const logger = createScopedLogger('Chat');
@@ -244,19 +244,21 @@ export const ChatImpl = memo(
           const settings = autoFixStore.get().settings;
 
           setTimeout(() => {
-            // If still auto-fixing and no new alert was triggered, consider it fixed
-            if (isAutoFixActive()) {
-              const currentAlert = workbenchStore.actionAlert.get();
+            // Guard: re-check auto-fix hasn't been reset or max retries reached
+            if (!isAutoFixActive() || hasExceededMaxRetries()) {
+              return;
+            }
 
-              if (!currentAlert) {
-                // No new error detected - fix was successful!
-                handleFixSuccess();
-                logger.info('Auto-fix successful - no new errors detected');
-              } else {
-                // Error still present or new error - record attempt
-                recordFixAttempt(false);
-                logger.debug('Auto-fix attempt completed, error still present');
-              }
+            const currentAlert = workbenchStore.actionAlert.get();
+
+            if (!currentAlert) {
+              // No new error detected - fix was successful!
+              handleFixSuccess();
+              logger.info('Auto-fix successful - no new errors detected');
+            } else {
+              // Error still present or new error - record attempt
+              recordFixAttempt(false);
+              logger.debug('Auto-fix attempt completed, error still present');
             }
           }, settings.delayBetweenAttempts + 2000); // Wait for code to run + buffer
         }
