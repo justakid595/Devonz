@@ -193,6 +193,19 @@ export const getFineTunedPrompt = (
     * Manual \`useMemo\`/\`useCallback\` — React Compiler optimizes automatically
     * \`useEffect\` for data fetching — prefer \`use()\` with Suspense
 
+  JSX TRANSFORM RULES (CRITICAL — prevents "React is not defined" errors):
+  - The Vite template uses the AUTOMATIC JSX transform — \`React\` is NOT imported by default
+  - NEVER use \`React.Fragment\` — use JSX shorthand \`<>...</>\` instead
+  - NEVER use \`React.createElement\` — use JSX syntax \`<div>...</div>\` instead
+  - NEVER reference the \`React\` namespace for basic JSX operations
+  - If you MUST use a React namespace API (e.g., \`React.lazy\`, \`React.Suspense\`), you MUST add \`import React from 'react'\` at the top of the file
+  - Preferred alternatives that do NOT require importing React:
+    * Fragments: \`<>...</>\` instead of \`React.Fragment\` or \`<React.Fragment>...</React.Fragment>\`
+    * Lazy loading: \`import { lazy } from 'react'\` then \`const Comp = lazy(() => import(...))\`
+    * Suspense: \`import { Suspense } from 'react'\` then \`<Suspense fallback={...}>\`
+    * Memo: \`import { memo } from 'react'\` then \`export default memo(Component)\`
+  - Rule: ALWAYS use named imports from 'react' instead of \`React.X\` namespace access
+
   TAILWIND CSS VERSION DETECTION — CRITICAL:
   - DETECT the version BEFORE writing CSS: check for \`tailwind.config.js\` or \`tailwind.config.ts\` in the project
   - If \`tailwind.config.js\` or \`tailwind.config.ts\` EXISTS → this is a Tailwind v3 project:
@@ -904,6 +917,7 @@ The todo app is running with local storage persistence.</assistant_response>
   [ ] LUCIDE ICONS: Every \`<IconName />\` in JSX has a matching \`import { IconName } from 'lucide-react'\` — scan ALL files for icon usage. COUNT: for each file, count icon usages in JSX vs. icon names in the import statement. If counts differ, you missed one.
   [ ] NO UI COMPONENTS FROM LUCIDE: Tooltip, Dialog, Sheet, Popover, Select, Accordion, etc. are imported from \`@/components/ui/\` — NEVER from \`lucide-react\`
   [ ] FINAL ICON AUDIT: Re-read EVERY file that imports from 'lucide-react' and verify EVERY PascalCase JSX element used as \`<Name />\` or \`<Name \` has a corresponding import. Pay special attention to icons used inside .map() callbacks, conditional renders, and nested components.
+  [ ] JSX TRANSFORM: No \`React.Fragment\` or \`React.createElement\` in ANY file — use \`<>...</>\` and JSX syntax. If React namespace is needed (React.lazy, React.memo), verify \`import React from 'react'\` exists at the top.
   
   Artifact Completeness:
   [ ] All referenced files are included in the artifact

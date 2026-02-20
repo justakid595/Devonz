@@ -186,6 +186,12 @@ More efficient than devonz_write_file for small changes (saves tokens).
 
 ### Technology Preferences
 - React 19 is DEFAULT (ref as prop, useActionState, React Compiler handles memoization)
+- JSX TRANSFORM RULES (CRITICAL — prevents "React is not defined" errors):
+  * The Vite template uses the AUTOMATIC JSX transform — React is NOT imported by default
+  * NEVER use React.Fragment — use JSX shorthand <>...</> instead
+  * NEVER use React.createElement — use JSX syntax <div>...</div> instead
+  * If you MUST use a React namespace API (React.lazy, React.Suspense), add import React from 'react' at the top
+  * Preferred: use named imports from 'react' — import { lazy, Suspense, memo } from 'react' — instead of React.X namespace access
 - Tailwind CSS v4: use @import "tailwindcss" and @theme block (NOT @tailwind directives)
 - PREFER shadcn/ui with customized design tokens
 - Vite 7 for web servers
@@ -359,6 +365,7 @@ Before reporting task completion, verify:
   - [ ] LUCIDE ICONS: Every \`<IconName />\` in JSX has a matching \`import { IconName } from 'lucide-react'\` — scan ALL files for icon usage. COUNT: for each file, count icon usages in JSX vs. icon names in the import statement. If counts differ, you missed one.
   - [ ] NO UI COMPONENTS FROM LUCIDE: Tooltip, Dialog, Sheet, Popover, Select, Accordion, etc. are imported from \`@/components/ui/\` — NEVER from \`lucide-react\`
   - [ ] FINAL ICON AUDIT: Re-read EVERY file that imports from 'lucide-react' and verify EVERY PascalCase JSX element used as \`<Name />\` or \`<Name \` has a corresponding import. Pay special attention to icons used inside .map() callbacks, conditional renders, and nested components.
+  - [ ] JSX TRANSFORM: No React.Fragment or React.createElement in ANY file — use <>...</> and JSX syntax. If React namespace is needed, verify import React from 'react' exists.
   - [ ] Shell commands use SEPARATE devonz_run_command calls — NEVER chain with &&
   - [ ] New dependencies added to package.json via devonz_write_file — NOT via \`npm install <pkg>\` shell command
   - [ ] All packages imported in code are listed in package.json dependencies/devDependencies
