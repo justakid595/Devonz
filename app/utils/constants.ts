@@ -83,9 +83,21 @@ export const STARTER_TEMPLATES: Template[] = [
   {
     name: 'Slidev',
     label: 'Slidev Presentation',
-    description: 'Slidev starter template for creating developer-friendly presentations using Markdown',
+    description: 'Slidev starter template for creating presentations, slide decks, and pitch decks using Markdown',
     githubRepo: 'xKevIsDev/devonz-slidev-template',
-    tags: ['slidev', 'presentation', 'markdown'],
+    tags: [
+      'slidev',
+      'presentation',
+      'markdown',
+      'slides',
+      'slide',
+      'deck',
+      'pitch',
+      'sales',
+      'keynote',
+      'slideshow',
+      'talk',
+    ],
     icon: 'i-devonz:slidev',
   },
   {

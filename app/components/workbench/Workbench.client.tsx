@@ -31,6 +31,8 @@ import { useChatHistory } from '~/lib/persistence';
 import { streamingState } from '~/lib/stores/streaming';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { usePlanSync } from '~/lib/hooks/usePlanSync';
+import { webcontainer } from '~/lib/webcontainer';
+import { WORK_DIR } from '~/utils/constants';
 
 const workbenchLogger = createScopedLogger('Workbench');
 
@@ -105,6 +107,35 @@ export const Workbench = memo(
         const timer = setTimeout(() => {
           const previewStore = usePreviewStore();
           previewStore.refreshAllPreviews();
+
+          // Auto-start static server fallback:
+          // If no start action was run and no previews exist, serve static files
+          const previews = workbenchStore.previews.get();
+          const artifacts = workbenchStore.artifacts.get();
+          const hasStartAction = Object.values(artifacts).some((artifact) =>
+            Object.values(artifact.runner.actions.get()).some((action) => action.type === 'start'),
+          );
+
+          if (!hasStartAction && previews.length === 0) {
+            // Check if index.html exists in project files
+            const currentFiles = workbenchStore.files.get();
+            const hasIndexHtml = Object.keys(currentFiles).some(
+              (filePath) => filePath.endsWith('/index.html') && currentFiles[filePath]?.type === 'file',
+            );
+
+            if (hasIndexHtml) {
+              workbenchLogger.info('No start action found — launching static file server for index.html');
+
+              webcontainer.then((wc) => {
+                wc.spawn('npx', ['--yes', 'serve', '.'], {
+                  cwd: WORK_DIR,
+                  env: { NODE_ENV: 'development' },
+                }).catch((err) => {
+                  workbenchLogger.error('Failed to start static file server:', err);
+                });
+              });
+            }
+          }
         }, 2000);
 
         prevStreamingRef.current = streaming;
