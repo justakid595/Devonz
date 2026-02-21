@@ -87,9 +87,14 @@ function parseCookies(cookieHeader: string): Record<string, string> {
     const [name, ...rest] = item.split('=');
 
     if (name && rest) {
-      const decodedName = decodeURIComponent(name.trim());
-      const decodedValue = decodeURIComponent(rest.join('=').trim());
-      cookies[decodedName] = decodedValue;
+      try {
+        const decodedName = decodeURIComponent(name.trim());
+        const decodedValue = decodeURIComponent(rest.join('=').trim());
+        cookies[decodedName] = decodedValue;
+      } catch {
+        // Malformed percent-encoding — use raw values
+        cookies[name.trim()] = rest.join('=').trim();
+      }
     }
   });
 
