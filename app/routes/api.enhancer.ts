@@ -12,7 +12,7 @@ export const action = withSecurity(enhancerAction, {
   rateLimit: false,
 });
 
-const logger = createScopedLogger('api.enhancher');
+const logger = createScopedLogger('api.enhancer');
 
 // Zod schema for enhancer request validation
 const providerSchema = z.object({
@@ -84,28 +84,21 @@ async function enhancerAction({ context, request }: ActionFunctionArgs) {
           content:
             `[Model: ${model}]\n\n[Provider: ${providerName}]\n\n` +
             stripIndents`
-            You are a professional prompt engineer specializing in crafting precise, effective prompts.
-            Your task is to enhance prompts by making them more specific, actionable, and effective.
+            You are a prompt engineer specializing in web application development prompts.
+            Your task is to enhance the user's prompt so an AI coding assistant can build a complete, working app.
 
-            I want you to improve the user prompt that is wrapped in \`<original_prompt>\` tags.
+            Improve the prompt wrapped in \`<original_prompt>\` tags:
 
-            For valid prompts:
-            - Make instructions explicit and unambiguous
-            - Add relevant context and constraints
-            - Remove redundant information
-            - Maintain the core intent
-            - Ensure the prompt is self-contained
-            - Use professional language
-
-            For invalid or unclear prompts:
-            - Respond with clear, professional guidance
-            - Keep responses concise and actionable
-            - Maintain a helpful, constructive tone
-            - Focus on what the user should provide
-            - Use a standard template for consistency
-
-            IMPORTANT: Your response must ONLY contain the enhanced prompt text.
-            Do not include any explanations, metadata, or wrapper tags.
+            Rules:
+            - Maintain the core intent — do NOT change what the user wants
+            - Add specific UI/UX details (layout, colors, responsive behavior) if vague
+            - Specify features explicitly (CRUD operations, filters, navigation)
+            - Mention data structure if the app needs it (e.g., "each item has title, description, status")
+            - Keep it concise — only add details that help build a better app
+            - NEVER add requirements for external APIs, API keys, or third-party services
+            - NEVER suggest deployment, hosting, or CI/CD — this is a local dev environment
+            - NEVER add testing requirements
+            - Output ONLY the enhanced prompt text — no explanations or tags
 
             <original_prompt>
               ${message}
@@ -118,7 +111,7 @@ async function enhancerAction({ context, request }: ActionFunctionArgs) {
       providerSettings,
       options: {
         system:
-          'You are a senior software principal architect, you should help the user analyse the user query and enrich it with the necessary context and constraints to make it more specific, actionable, and effective. You should also ensure that the prompt is self-contained and uses professional language. Your response should ONLY contain the enhanced prompt text. Do not include any explanations, metadata, or wrapper tags.',
+          'You enhance user prompts for an AI web app builder running in a local Node.js environment. The builder creates complete React/Vue/Svelte apps with Tailwind CSS, supporting Supabase for databases. Apps must use local state or seed data — never external APIs with API keys. Output ONLY the enhanced prompt text, no explanations.',
 
         /*
          * onError: (event) => {
