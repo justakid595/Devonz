@@ -88,9 +88,10 @@ export class GitHubApiServiceClass {
   async getAllUserRepositories(): Promise<GitHubRepoInfo[]> {
     const allRepos: GitHubRepoInfo[] = [];
     let page = 1;
+    const maxPages = 20; // Safety cap: 20 pages × 100 = 2000 repos max
     let hasMore = true;
 
-    while (hasMore) {
+    while (hasMore && page <= maxPages) {
       const repos = await this._makeRequestInternal<GitHubRepoInfo[]>(
         `/user/repos?per_page=100&page=${page}&sort=updated`,
       );

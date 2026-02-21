@@ -56,9 +56,10 @@ async function githubStatsLoader({ request, context }: LoaderFunctionArgs) {
 
     let allRepos: GitHubRepoApiResponse[] = [];
     let page = 1;
+    const maxPages = 20; // Safety cap: 20 pages × 100 = 2000 repos max
     let hasMore = true;
 
-    while (hasMore) {
+    while (hasMore && page <= maxPages) {
       const repoResponse = await externalFetch({
         url: `https://api.github.com/user/repos?sort=updated&per_page=100&page=${page}&affiliation=owner,organization_member`,
         token: githubToken,
