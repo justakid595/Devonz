@@ -395,10 +395,17 @@ export class ActionRunner {
      * detection, no terminal contention with the dev server, and proper exit codes.
      */
     if (/^npm\s+(install|ci)\b/i.test(action.content.trim())) {
-      logger.info(`Running npm install via runtime.exec: ${action.content.substring(0, 60)}`);
+      let npmCommand = action.content.trim();
+
+      // Ensure --legacy-peer-deps is always present to avoid peer dep conflicts
+      if (!npmCommand.includes('--legacy-peer-deps')) {
+        npmCommand += ' --legacy-peer-deps';
+      }
+
+      logger.info(`Running npm install via runtime.exec: ${npmCommand.substring(0, 80)}`);
 
       const runtime = await this.#runtime;
-      const result = await this.#execNpmInstall(runtime, action.content);
+      const result = await this.#execNpmInstall(runtime, npmCommand);
 
       if (result.exitCode !== 0) {
         const enhancedError = this.#createEnhancedShellError(action.content, result.exitCode, result.output);
@@ -1258,6 +1265,9 @@ export class ActionRunner {
       await scanAndFix('app');
       await scanAndFix('pages');
       await scanAndFix('components');
+      await scanAndFix('routes');
+      await scanAndFix('lib');
+      await scanAndFix('utils');
 
       logger.debug('Component import validation complete');
     } catch (error) {
@@ -1279,7 +1289,9 @@ export class ActionRunner {
       const newPkg = JSON.parse(newContent);
 
       const existingDeps = existingPkg.dependencies || {};
+      const existingDevDeps = existingPkg.devDependencies || {};
       const newDeps = newPkg.dependencies || {};
+      const newDevDeps = newPkg.devDependencies || {};
 
       // Count how many existing deps are missing from the new package.json
       const missingDeps: Record<string, string> = {};
@@ -1290,20 +1302,40 @@ export class ActionRunner {
         }
       }
 
+      const missingDevDeps: Record<string, string> = {};
+
+      for (const [pkg, version] of Object.entries(existingDevDeps)) {
+        if (!newDevDeps[pkg]) {
+          missingDevDeps[pkg] = version as string;
+        }
+      }
+
       const missingCount = Object.keys(missingDeps).length;
+      const missingDevCount = Object.keys(missingDevDeps).length;
       const existingCount = Object.keys(existingDeps).length;
+      const existingDevCount = Object.keys(existingDevDeps).length;
 
       /*
        * Only merge if a significant number of deps were dropped (> 5 and > 30%).
        * This avoids interfering with intentional dependency changes.
+       * Apply the threshold independently to deps and devDeps.
        */
-      if (missingCount > 5 && missingCount / existingCount > 0.3) {
+      let merged = false;
+
+      if (missingCount > 5 && existingCount > 0 && missingCount / existingCount > 0.3) {
         newPkg.dependencies = { ...missingDeps, ...newDeps };
+        logger.info(`Merged ${missingCount} missing dependencies back into package.json`);
+        merged = true;
+      }
 
-        const merged = JSON.stringify(newPkg, null, 2);
-        logger.info(`Merged ${missingCount} missing dependencies back into package.json (prevented dep loss)`);
+      if (missingDevCount > 3 && existingDevCount > 0 && missingDevCount / existingDevCount > 0.3) {
+        newPkg.devDependencies = { ...missingDevDeps, ...newDevDeps };
+        logger.info(`Merged ${missingDevCount} missing devDependencies back into package.json`);
+        merged = true;
+      }
 
-        return merged;
+      if (merged) {
+        return JSON.stringify(newPkg, null, 2);
       }
     } catch (error) {
       /*
