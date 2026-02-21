@@ -232,6 +232,7 @@ export const CodeMirrorEditor = memo(
       viewRef.current = view;
 
       return () => {
+        onUpdate.cancel();
         viewRef.current?.destroy();
         viewRef.current = undefined;
       };
