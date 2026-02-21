@@ -452,6 +452,25 @@ export function useChatHistory() {
               chatSummary,
             });
           }
+
+          /*
+           * Schedule retries to cover the timing gap between annotation
+           * extraction and version creation (createVersion uses 500ms debounce)
+           */
+          const retryMeta = { totalTokens: usage?.totalTokens, chatSummary };
+          const retryMessageId = lastMessage.id;
+
+          const attemptMetaUpdate = () => {
+            const latest = versionsStore.getLatestVersion();
+
+            if (latest && latest.messageId === retryMessageId && !latest.totalTokens && retryMeta.totalTokens) {
+              versionsStore.updateVersionMeta(latest.id, retryMeta);
+            }
+          };
+
+          // Retry at 1.5s and 4s to cover version creation timing
+          setTimeout(attemptMetaUpdate, 1500);
+          setTimeout(attemptMetaUpdate, 4000);
         }
 
         lastSnapshotParamsRef.current = { chatIdx: messages[messages.length - 1].id, chatSummary };

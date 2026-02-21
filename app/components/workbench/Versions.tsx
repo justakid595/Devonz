@@ -346,6 +346,10 @@ export const Versions = memo(() => {
 
     const log = await getLog(currentProjectId);
     setCommits(log);
+
+    // Try to backfill any missing thumbnails now that the panel is visible
+    versionsStore.backfillMissingThumbnails();
+
     setLoading(false);
   }, []);
 
