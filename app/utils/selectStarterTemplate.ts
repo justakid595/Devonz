@@ -55,6 +55,7 @@ const SHADCN_PEER_DEPS: Record<string, string> = {
   'embla-carousel-react': '^8.5.1',
   'react-resizable-panels': '^2.1.7',
   recharts: '^2.15.0',
+  'tailwindcss-animate': '^1.0.7',
 };
 
 /**

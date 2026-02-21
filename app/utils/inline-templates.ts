@@ -497,6 +497,7 @@ const nextjsShadcn: InlineFile[] = [
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.16",
+    "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.6.3"
   }
 }
@@ -570,7 +571,7 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [require('tailwindcss-animate')],
 };
 
 export default config;
@@ -646,7 +647,7 @@ export default function RootLayout({
   return (
     <main className="flex min-h-screen flex-col items-center justify-center p-24">
       <h1 className="text-4xl font-bold">Next.js + shadcn/ui</h1>
-      <p className="mt-4 text-lg text-gray-600">Edit app/page.tsx to get started.</p>
+      <p className="mt-4 text-lg text-muted-foreground">Edit app/page.tsx to get started.</p>
     </main>
   );
 }
@@ -747,6 +748,7 @@ const viteShadcn: InlineFile[] = [
     "autoprefixer": "^10.4.20",
     "postcss": "^8.4.49",
     "tailwindcss": "^3.4.16",
+    "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.6.3",
     "vite": "^6.0.0"
   }
@@ -838,7 +840,7 @@ const config: Config = {
       },
     },
   },
-  plugins: [],
+  plugins: [require('tailwindcss-animate')],
 };
 
 export default config;
@@ -909,7 +911,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   return (
     <div className="flex min-h-screen flex-col items-center justify-center">
       <h1 className="text-4xl font-bold">Vite + React + shadcn/ui</h1>
-      <p className="mt-4 text-lg text-gray-600">Edit src/App.tsx to get started.</p>
+      <p className="mt-4 text-lg text-muted-foreground">Edit src/App.tsx to get started.</p>
     </div>
   );
 }
