@@ -217,6 +217,31 @@ const SHADCN_COMPONENT_EXPORTS: Record<string, string[]> = {
     'AlertDialogTitle',
     'AlertDialogTrigger',
   ],
+  chart: ['ChartContainer', 'ChartTooltip', 'ChartTooltipContent', 'ChartLegend', 'ChartLegendContent'],
+  toast: ['Toast', 'ToastAction', 'Toaster', 'useToast'],
+  sheet: [
+    'Sheet',
+    'SheetContent',
+    'SheetDescription',
+    'SheetFooter',
+    'SheetHeader',
+    'SheetTitle',
+    'SheetTrigger',
+    'SheetClose',
+  ],
+  table: ['Table', 'TableBody', 'TableCaption', 'TableCell', 'TableHead', 'TableHeader', 'TableRow', 'TableFooter'],
+  form: ['Form', 'FormControl', 'FormDescription', 'FormField', 'FormItem', 'FormLabel', 'FormMessage'],
+  command: ['Command', 'CommandDialog', 'CommandEmpty', 'CommandGroup', 'CommandInput', 'CommandItem', 'CommandList'],
+  drawer: [
+    'Drawer',
+    'DrawerContent',
+    'DrawerDescription',
+    'DrawerFooter',
+    'DrawerHeader',
+    'DrawerTitle',
+    'DrawerTrigger',
+    'DrawerClose',
+  ],
 };
 
 interface PromptTemplate {
@@ -594,14 +619,8 @@ function buildShadcnImportGuide(componentNames: string[], shadcnDir: string, use
 
     const importPath = usesAtAlias ? `@/${shadcnDir}${name}` : `./${shadcnDir}${name}`;
 
-    // For components with many exports, show the most commonly used ones
-    if (exports.length <= 4) {
-      lines.push(`import { ${exports.join(', ')} } from "${importPath}"`);
-    } else {
-      // Show first 4 exports + indication of more
-      const shown = exports.slice(0, 4);
-      lines.push(`import { ${shown.join(', ')}, ... } from "${importPath}"`);
-    }
+    // Show ALL exports so the LLM knows every available sub-component
+    lines.push(`import { ${exports.join(', ')} } from "${importPath}"`);
   }
 
   return lines.join('\n');
@@ -998,6 +1017,8 @@ RULES:
 3. USE pre-installed packages — do NOT install alternatives for what's already available.
 4. Keep the template's styling approach. Build a COMPLETE working app — no placeholders or stubs.
 5. Only run npm install when adding NEW packages not already installed.
+6. If using react-router-dom: wrap the entire app in <BrowserRouter> inside App.tsx, define ALL <Route> elements matching every nav link. Every route MUST render a real page component.
+7. If using sonner for toasts: add <Toaster /> in App.tsx (import from 'sonner'). Call toast() from event handlers.
 
 Implement the user's request below by modifying existing files and adding new ones as needed.
 `;

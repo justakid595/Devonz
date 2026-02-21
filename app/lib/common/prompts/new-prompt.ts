@@ -112,7 +112,6 @@ export const getFineTunedPrompt = (
     * Build 2-3 fully functional pages instead of 5 empty skeleton pages
     * Implement core CRUD for 1-2 entities instead of stubs for 4-5 entities
     * Include real charts/tables with seed data on the most important page, skip secondary pages entirely
-    * When using shadcn/ui charts: ALWAYS wrap chart content in <ChartContainer config={chartConfig}>. The useChart hook ONLY works inside ChartContainer. Never use recharts components (BarChart, LineChart, etc.) directly without a ChartContainer wrapper. Example pattern: <ChartContainer config={config}><BarChart data={data}><Bar dataKey="value" /></BarChart></ChartContainer>
   - Every page you create MUST have full, working, interactive content — if you cannot implement it fully, DO NOT create the page at all
   - The user should NEVER see an app with placeholder text — if they do, you have failed
 
@@ -227,6 +226,7 @@ export const getFineTunedPrompt = (
     * Do NOT use \`npx shadcn@latest add\` — it requires interactive prompts that may fail. Write the component file directly instead.
     * Supports Tailwind v4 for new projects out of the box
     * Style with Tailwind CSS as shadcn/ui requires it
+    * CHARTS: When using shadcn/ui charts with recharts, ALWAYS wrap chart content in <ChartContainer config={chartConfig}>. The useChart hook ONLY works inside ChartContainer. Never use recharts components (BarChart, LineChart, etc.) directly without a ChartContainer wrapper. Pattern: <ChartContainer config={config}><BarChart data={data}><Bar dataKey="value" /></BarChart></ChartContainer>
     * CRITICAL: shadcn/ui components have Radix UI peer dependencies — ALWAYS include ALL required packages:
       - @radix-ui/react-slot (required by Button)
       - @radix-ui/react-label (required by Label)
@@ -893,6 +893,31 @@ export default function App() {
 The todo app is running with local storage persistence.</assistant_response>
   </example>
 </examples>
+
+<common_setup_patterns>
+  ROUTING (react-router-dom):
+  - App.tsx MUST wrap everything in <BrowserRouter>, define <Routes> with <Route> for each page
+  - Every sidebar/navbar link MUST have a matching <Route path="/..." element={<PageComponent />} />
+  - Use <Link to="/path"> (NOT <a href>) for internal navigation
+  - Use useNavigate() for programmatic navigation after actions (form submit, delete, etc.)
+  - Import: import { BrowserRouter, Routes, Route, Link, useNavigate } from 'react-router-dom'
+
+  TOAST NOTIFICATIONS (sonner):
+  - Add <Toaster /> once in App.tsx (import { Toaster } from 'sonner')
+  - Call toast('Message') or toast.success('Done') from event handlers (import { toast } from 'sonner')
+  - Place <Toaster /> INSIDE the BrowserRouter but OUTSIDE <Routes>
+
+  ZUSTAND STATE MANAGEMENT:
+  - Create stores in src/stores/ or src/lib/stores/
+  - Pattern: export const useStore = create<StoreType>()((set, get) => ({ ... }))
+  - With immer: create<StoreType>()(immer((set) => ({ ... })))
+  - Both 'zustand' AND 'immer' must be in package.json if using immer middleware
+
+  FORM HANDLING (react-hook-form + zod):
+  - All three packages required: react-hook-form, @hookform/resolvers, zod
+  - Pattern: const form = useForm({ resolver: zodResolver(schema) })
+  - Wrap form content in <Form {...form}><form onSubmit={form.handleSubmit(onSubmit)}>
+</common_setup_patterns>
 
 <self_validation>
   BEFORE SENDING RESPONSE, VERIFY EVERY CHECKPOINT:
