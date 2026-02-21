@@ -591,6 +591,33 @@ function detectTemplateArchitecture(files: Array<{ name: string; path: string; c
 }
 
 /**
+ * Build a compact directory listing from template file paths.
+ * Shows directories the LLM should use for new files.
+ */
+function buildDirectoryHint(files: Array<{ path: string }>): string {
+  const dirs = new Set<string>();
+
+  for (const f of files) {
+    const parts = f.path.split('/');
+
+    // Collect up to 2 levels deep (e.g., "src/components/")
+    if (parts.length >= 2) {
+      dirs.add(`${parts[0]}/`);
+
+      if (parts.length >= 3) {
+        dirs.add(`${parts[0]}/${parts[1]}/`);
+      }
+    }
+  }
+
+  // Filter out noise directories
+  const ignore = new Set(['.git/', '.github/', '.devonz/', 'node_modules/', '.vscode/']);
+  const sorted = [...dirs].filter((d) => !ignore.has(d)).sort();
+
+  return sorted.length > 0 ? sorted.join(', ') : '';
+}
+
+/**
  * Frameworks whose templates should get full COMMON_EXTRA_PACKAGES
  * (React-specific + universal) injected into package.json.
  */
@@ -898,16 +925,18 @@ ${resolvedName.toLowerCase().includes('shadcn') ? `- Shadcn/ui template: Radix U
 
   // Detect template architecture for LLM context
   const archSummary = detectTemplateArchitecture(filteredFiles);
+  const dirHint = buildDirectoryHint(filteredFiles);
 
   userMessage += `
 Template "${displayName}" imported and running.
-${archSummary ? `Architecture: ${archSummary}\n` : ''}Pre-installed packages (ready to import): ${availablePackageHint}.
+${archSummary ? `Architecture: ${archSummary}\n` : ''}${dirHint ? `Directories: ${dirHint}\n` : ''}Pre-installed packages (ready to import): ${availablePackageHint}.
 
 RULES:
 1. Edit only the files you need — preserve existing imports, exports, and structure.
-2. Follow the template's existing directory structure and patterns.
+2. Follow the template's existing directory structure and patterns. Place new components in the existing components directory.
 3. USE the pre-installed packages above. Do NOT install alternatives (e.g., use lucide-react not heroicons).
 4. Keep the template's styling approach (CSS modules, Tailwind, etc.) — do not switch frameworks.
+5. Build a COMPLETE, working application in a single response — no placeholders or "coming soon" pages.
 `;
 
   return {
