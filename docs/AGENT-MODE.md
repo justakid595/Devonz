@@ -83,6 +83,7 @@ The LLM can call these tools during agent mode execution.
 | `devonz_run_command` | Execute shell commands (npm, node, etc.) | Configurable |
 | `devonz_get_errors` | Check for build/runtime/preview errors | No |
 | `devonz_search_code` | Search for code patterns across files (supports regex) | No |
+| `devonz_patch_file` | Make targeted text replacements without rewriting entire files | Configurable |
 
 ### Tool Parameters
 
@@ -160,6 +161,18 @@ The LLM can call these tools during agent mode execution.
   maxResults?: number;     // Max results (default: 50)
   includePattern?: string; // File path include filter
   excludePattern?: string; // File path exclude filter
+}
+```
+
+#### `devonz_patch_file`
+
+```typescript
+{
+  path: string;            // Absolute path to file (e.g., "/src/App.tsx")
+  replacements: Array<{    // Array of targeted replacements
+    oldText: string;       // Exact text to find
+    newText: string;       // Replacement text
+  }>;
 }
 ```
 
