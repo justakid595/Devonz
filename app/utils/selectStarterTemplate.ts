@@ -1022,7 +1022,31 @@ ${resolvedName.toLowerCase().includes('shadcn') ? `- Shadcn/ui template: All Rad
   userMessage += `
 Template "${displayName}" imported and running. All files are already created and installed — DO NOT recreate them.
 ${archSummary ? `Architecture: ${archSummary}\n` : ''}${dirHint ? `Directories: ${dirHint}\n` : ''}Pre-installed packages (ready to import): ${availablePackageHint}.
-${mainEntryFile ? `Primary file to modify: ${mainEntryFile}\n` : ''}
+${mainEntryFile ? `Primary file to modify: ${mainEntryFile}\n` : ''}`;
+
+  /*
+   * Add framework-specific coding hints for non-React frameworks
+   * (The system prompt is heavily React-focused, so these prevent the LLM from generating React patterns)
+   */
+  if (isVueFamily(resolvedName)) {
+    userMessage += `
+FRAMEWORK: Vue 3 — Use Composition API (<script setup>), reactive()/ref(), computed(), Pinia for state, vue-router for routing. Do NOT use React patterns.
+`;
+  } else if (isSvelteFamily(resolvedName)) {
+    userMessage += `
+FRAMEWORK: SvelteKit — Use .svelte files with <script>, reactive $: statements, Svelte stores for state, file-based routing (+page.svelte, +layout.svelte). Do NOT use React patterns.
+`;
+  } else if (isAngularFamily(resolvedName)) {
+    userMessage += `
+FRAMEWORK: Angular — Use @Component decorators, Angular templates, services with @Injectable, Angular Router, RxJS Observables. Do NOT use React patterns.
+`;
+  } else if (isSolidFamily(resolvedName)) {
+    userMessage += `
+FRAMEWORK: SolidJS — Use createSignal(), createEffect(), createMemo(), JSX (looks like React but different reactivity). Use @solidjs/router for routing. Do NOT use React hooks (useState, useEffect).
+`;
+  }
+
+  userMessage += `
 RULES:
 1. MODIFY existing files — do NOT recreate config/entry files (vite.config, tsconfig, tailwind.config, package.json).
 2. Follow the existing directory structure. Place new components in the components directory.
