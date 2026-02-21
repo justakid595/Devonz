@@ -18,7 +18,16 @@ import { logger } from '~/utils/logger';
 import { themeStore, type Theme } from '~/lib/stores/theme';
 import { useStore } from '@nanostores/react';
 import { mcpStore } from '~/lib/stores/mcp';
+import { agentModeStore } from '~/lib/stores/agentMode';
 import type { ToolCallAnnotation } from '~/types/context';
+import { shouldAutoApproveAgentTool } from '~/utils/agentToolApproval';
+
+/**
+ * NOTE: Primary auto-approval for agent tools happens in Chat.client.tsx via
+ * onToolCall (which works with maxSteps for automatic re-submission).
+ * This component provides fallback UI auto-approval for MCP tools and
+ * any agent tools that slip through.
+ */
 
 /**
  * DOMPurify configuration for sanitizing Shiki syntax-highlighted HTML output.
@@ -565,6 +574,7 @@ const ToolCallsList = memo(({ toolInvocations, toolCallAnnotations, addToolResul
   const autoApprovedRef = useRef<Set<string>>(new Set());
   const { settings } = useStore(mcpStore);
   const autoApproveServers = settings.autoApproveServers || [];
+  const { settings: agentSettings } = useStore(agentModeStore);
 
   // OS detection for shortcut display
   const isMac = typeof navigator !== 'undefined' && /Mac|iPod|iPhone|iPad/.test(navigator.platform);
@@ -579,14 +589,14 @@ const ToolCallsList = memo(({ toolInvocations, toolCallAnnotations, addToolResul
     setExpanded(expandedState);
   }, [toolInvocations]);
 
-  // Auto-approve MCP tool calls for servers in the auto-approve list
+  // Auto-approve tool calls for MCP servers in the auto-approve list AND agent tools based on settings
   useEffect(() => {
     toolInvocations.forEach((inv) => {
       if (inv.toolInvocation.state !== 'call') {
         return;
       }
 
-      const { toolCallId } = inv.toolInvocation;
+      const { toolCallId, toolName } = inv.toolInvocation;
 
       // Skip if already auto-approved to prevent infinite loops
       if (autoApprovedRef.current.has(toolCallId)) {
@@ -596,17 +606,22 @@ const ToolCallsList = memo(({ toolInvocations, toolCallAnnotations, addToolResul
       const annotation = toolCallAnnotations.find((a) => a.toolCallId === toolCallId);
       const serverName = annotation?.serverName ?? '';
 
-      // Only auto-approve if the server is in the auto-approve list
-      if (!autoApproveServers.includes(serverName)) {
+      // Check MCP server auto-approve list
+      const isMcpAutoApproved = autoApproveServers.includes(serverName);
+
+      // Check agent tool auto-approve settings
+      const isAgentAutoApproved = serverName === 'devonz-agent' && shouldAutoApproveAgentTool(toolName, agentSettings);
+
+      if (!isMcpAutoApproved && !isAgentAutoApproved) {
         return;
       }
 
       autoApprovedRef.current.add(toolCallId);
 
-      logger.debug(`Auto-approving tool "${inv.toolInvocation.toolName}" from server "${serverName}"`);
+      logger.debug(`Auto-approving tool "${toolName}" from server "${serverName}"`);
       addToolResult({ toolCallId, result: TOOL_EXECUTION_APPROVAL.APPROVE });
     });
-  }, [toolInvocations, toolCallAnnotations, addToolResult, autoApproveServers]);
+  }, [toolInvocations, toolCallAnnotations, addToolResult, autoApproveServers, agentSettings]);
 
   // Keyboard shortcut logic
   useEffect(() => {
@@ -664,7 +679,9 @@ const ToolCallsList = memo(({ toolInvocations, toolCallAnnotations, addToolResul
           const { toolName, toolCallId } = tool.toolInvocation;
           const annotation = toolCallAnnotations.find((annotation) => annotation.toolCallId === toolCallId);
           const serverName = annotation?.serverName ?? '';
-          const isAutoApproving = autoApproveServers.includes(serverName);
+          const isAutoApproving =
+            autoApproveServers.includes(serverName) ||
+            (serverName === 'devonz-agent' && shouldAutoApproveAgentTool(toolName, agentSettings));
 
           return (
             <motion.li

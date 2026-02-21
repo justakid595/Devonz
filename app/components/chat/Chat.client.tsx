@@ -32,6 +32,7 @@ import type { ElementInfo } from '~/components/workbench/inspector-types';
 import type { TextUIPart, FileUIPart, Attachment } from '@ai-sdk/ui-utils';
 import { mcpStore } from '~/lib/stores/mcp';
 import { agentModeStore } from '~/lib/stores/agentMode';
+import { shouldAutoApproveAgentTool } from '~/utils/agentToolApproval';
 import type { LlmErrorAlertType } from '~/types/actions';
 import {
   registerAutoFixCallback,
@@ -245,7 +246,38 @@ export const ChatImpl = memo(
         maxLLMSteps: mcpSettings.maxLLMSteps,
         agentMode: agentState.settings.enabled,
       },
+      maxSteps: mcpSettings.maxLLMSteps,
       sendExtraMessageFields: true,
+      async onToolCall({ toolCall }) {
+        /*
+         * Auto-approve and execute agent tools on the CLIENT side during streaming.
+         * This solves two problems:
+         * 1. Avoids addToolResult timing issue (status='streaming' causes early return)
+         * 2. Avoids SSR runtime hang (server's `await runtime` never resolves)
+         * By returning the actual tool result, maxSteps handles re-submission automatically
+         * and the server receives the real result instead of 'Yes, approved.'
+         */
+        if (agentState.settings.enabled) {
+          if (shouldAutoApproveAgentTool(toolCall.toolName, agentState.settings)) {
+            logger.debug(`[onToolCall] Auto-approving and executing agent tool: ${toolCall.toolName}`);
+
+            try {
+              const { executeAgentTool } = await import('~/lib/services/agentToolsService');
+              const result = await executeAgentTool(toolCall.toolName, toolCall.args as Record<string, unknown>);
+              logger.debug(`[onToolCall] Tool ${toolCall.toolName} completed`, result);
+
+              return result;
+            } catch (error) {
+              logger.error(`[onToolCall] Failed to execute agent tool: ${toolCall.toolName}`, error);
+
+              return { error: `Tool execution failed: ${error instanceof Error ? error.message : String(error)}` };
+            }
+          }
+        }
+
+        // Return undefined for tools that need manual approval (shows UI buttons)
+        return undefined;
+      },
       onError: (e) => {
         setFakeLoading(false);
         handleError(e, 'chat');
