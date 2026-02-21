@@ -1,62 +1,53 @@
 import { json, type ActionFunctionArgs } from '@remix-run/node';
 import type { SupabaseProject } from '~/types/supabase';
-import { createScopedLogger } from '~/utils/logger';
+import { handleApiError, externalFetch, ApiError } from '~/lib/api/apiUtils';
 import { withSecurity } from '~/lib/security';
-
-const logger = createScopedLogger('SupabaseAPI');
 
 async function supabaseAction({ request }: ActionFunctionArgs) {
   if (request.method !== 'POST') {
     return json({ error: 'Method not allowed' }, { status: 405 });
   }
 
-  try {
-    const { token } = (await request.json()) as { token: string };
+  return handleApiError(
+    'SupabaseAPI',
+    async () => {
+      const { token } = (await request.json()) as { token: string };
 
-    const projectsResponse = await fetch('https://api.supabase.com/v1/projects', {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-    });
+      const projectsResponse = await externalFetch({
+        url: 'https://api.supabase.com/v1/projects',
+        token,
+        headers: { 'Content-Type': 'application/json' },
+      });
 
-    if (!projectsResponse.ok) {
-      const errorText = await projectsResponse.text();
-      logger.error('Projects fetch failed:', errorText);
-
-      return json({ error: 'Failed to fetch projects' }, { status: 401 });
-    }
-
-    const projects = (await projectsResponse.json()) as SupabaseProject[];
-
-    const uniqueProjectsMap = new Map<string, SupabaseProject>();
-
-    for (const project of projects) {
-      if (!uniqueProjectsMap.has(project.id)) {
-        uniqueProjectsMap.set(project.id, project);
+      if (!projectsResponse.ok) {
+        const errorText = await projectsResponse.text();
+        throw new ApiError(`Failed to fetch projects: ${errorText}`, 401);
       }
-    }
 
-    const uniqueProjects = Array.from(uniqueProjectsMap.values());
+      const projects = (await projectsResponse.json()) as SupabaseProject[];
 
-    uniqueProjects.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      const uniqueProjectsMap = new Map<string, SupabaseProject>();
 
-    return json({
-      user: { email: 'Connected', role: 'Admin' },
-      stats: {
-        projects: uniqueProjects,
-        totalProjects: uniqueProjects.length,
-      },
-    });
-  } catch (error) {
-    logger.error('Supabase API error:', error);
-    return json(
-      {
-        error: error instanceof Error ? error.message : 'Authentication failed',
-      },
-      { status: 401 },
-    );
-  }
+      for (const project of projects) {
+        if (!uniqueProjectsMap.has(project.id)) {
+          uniqueProjectsMap.set(project.id, project);
+        }
+      }
+
+      const uniqueProjects = Array.from(uniqueProjectsMap.values());
+
+      uniqueProjects.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+
+      return json({
+        user: { email: 'Connected', role: 'Admin' },
+        stats: {
+          projects: uniqueProjects,
+          totalProjects: uniqueProjects.length,
+        },
+      });
+    },
+    'Authentication failed',
+  );
 }
 
 export const action = withSecurity(supabaseAction, {

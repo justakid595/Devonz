@@ -13,10 +13,7 @@
  * - Auto-fix integration for code errors
  */
 
-/*
- * NOTE: workbenchStore is imported lazily inside showAlert() to avoid circular dependency
- * webcontainer/index.ts -> previewErrorHandler.ts -> workbench.ts -> webcontainer/index.ts
- */
+/* NOTE: workbenchStore is imported lazily inside showAlert() to avoid circular dependency */
 import { cleanStackTrace } from '~/utils/stacktrace';
 import { createScopedLogger } from '~/utils/logger';
 import {
@@ -113,7 +110,7 @@ class PreviewErrorHandler {
   }
 
   /**
-   * Handle a preview error message from WebContainer
+   * Handle a preview error message from the runtime
    */
   async handlePreviewMessage(message: {
     type: string;
@@ -236,10 +233,7 @@ class PreviewErrorHandler {
       logger.warn('Max auto-fix retries exceeded for preview error, showing alert to user');
     }
 
-    /*
-     * Lazy import to avoid circular dependency:
-     * webcontainer/index.ts -> previewErrorHandler.ts -> workbench.ts -> webcontainer/index.ts
-     */
+    /* Lazy import to avoid circular dependency */
     const { workbenchStore } = await import('~/lib/stores/workbench');
 
     workbenchStore.actionAlert.set({

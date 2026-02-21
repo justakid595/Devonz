@@ -1,27 +1,39 @@
 /**
- * Cleans webcontainer URLs from stack traces to show relative paths instead
+ * Cleans runtime preview URLs from stack traces to show relative paths instead.
+ * Handles both localhost URLs (local runtime) and legacy webcontainer-api.io URLs.
  */
 export function cleanStackTrace(stackTrace: string): string {
-  // Function to clean a single URL
   const cleanUrl = (url: string): string => {
-    const regex = /^https?:\/\/[^\/]+\.webcontainer-api\.io(\/.*)?$/;
+    /* Match localhost preview URLs: http://localhost:PORT/path */
+    const localhostRegex = /^https?:\/\/localhost:\d+(\/.*)?$/;
 
-    if (!regex.test(url)) {
-      return url;
+    if (localhostRegex.test(url)) {
+      const pathRegex = /^https?:\/\/localhost:\d+\/(.*?)$/;
+      const match = url.match(pathRegex);
+
+      return match?.[1] || '';
     }
 
-    const pathRegex = /^https?:\/\/[^\/]+\.webcontainer-api\.io\/(.*?)$/;
-    const match = url.match(pathRegex);
+    /* Match legacy webcontainer-api.io URLs */
+    const wcRegex = /^https?:\/\/[^/]+\.webcontainer-api\.io(\/.*)?$/;
 
-    return match?.[1] || '';
+    if (wcRegex.test(url)) {
+      const pathRegex = /^https?:\/\/[^/]+\.webcontainer-api\.io\/(.*?)$/;
+      const match = url.match(pathRegex);
+
+      return match?.[1] || '';
+    }
+
+    return url;
   };
 
-  // Split the stack trace into lines and process each line
   return stackTrace
     .split('\n')
     .map((line) => {
-      // Match any URL in the line that contains webcontainer-api.io
-      return line.replace(/(https?:\/\/[^\/]+\.webcontainer-api\.io\/[^\s\)]+)/g, (match) => cleanUrl(match));
+      /* Match any URL in the line that contains localhost:PORT or webcontainer-api.io */
+      return line
+        .replace(/(https?:\/\/localhost:\d+\/[^\s)]+)/g, (match) => cleanUrl(match))
+        .replace(/(https?:\/\/[^/]+\.webcontainer-api\.io\/[^\s)]+)/g, (match) => cleanUrl(match));
     })
     .join('\n');
 }

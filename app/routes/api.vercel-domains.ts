@@ -7,12 +7,9 @@
  * - Remove domain
  */
 
-import { json, type ActionFunctionArgs, type AppLoadContext, type LoaderFunctionArgs } from '@remix-run/node';
-import { getApiKeysFromCookie } from '~/lib/api/cookies';
+import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from '@remix-run/node';
+import { externalFetch, handleApiError, resolveToken, unauthorizedResponse } from '~/lib/api/apiUtils';
 import { withSecurity } from '~/lib/security';
-import { createScopedLogger } from '~/utils/logger';
-
-const logger = createScopedLogger('VercelDomains');
 
 const VERCEL_API_BASE = 'https://api.vercel.com';
 
@@ -28,42 +25,13 @@ interface DomainRequest {
 }
 
 /**
- * Get Vercel token from request
- */
-function getVercelToken(request: Request, context: AppLoadContext): string | null {
-  // Try cookies first
-  const cookieHeader = request.headers.get('Cookie');
-  const apiKeys = getApiKeysFromCookie(cookieHeader);
-
-  if (apiKeys.VITE_VERCEL_ACCESS_TOKEN) {
-    return apiKeys.VITE_VERCEL_ACCESS_TOKEN;
-  }
-
-  // Try environment
-  const envToken = context?.cloudflare?.env?.VITE_VERCEL_ACCESS_TOKEN || process.env.VITE_VERCEL_ACCESS_TOKEN;
-
-  if (envToken) {
-    return envToken;
-  }
-
-  // Try Authorization header
-  const authHeader = request.headers.get('Authorization');
-
-  if (authHeader?.startsWith('Bearer ')) {
-    return authHeader.substring(7);
-  }
-
-  return null;
-}
-
-/**
  * Handle GET requests - list domains for a project
  */
 async function vercelDomainsLoader({ request, context }: LoaderFunctionArgs) {
-  const vercelToken = getVercelToken(request, context);
+  const vercelToken = resolveToken(request, context, 'VITE_VERCEL_ACCESS_TOKEN');
 
   if (!vercelToken) {
-    return json({ error: 'Vercel token not found' }, { status: 401 });
+    return unauthorizedResponse('Vercel');
   }
 
   const url = new URL(request.url);
@@ -73,12 +41,10 @@ async function vercelDomainsLoader({ request, context }: LoaderFunctionArgs) {
     return json({ error: 'Project ID is required' }, { status: 400 });
   }
 
-  try {
-    const response = await fetch(`${VERCEL_API_BASE}/v9/projects/${projectId}/domains`, {
-      headers: {
-        Authorization: `Bearer ${vercelToken}`,
-        'User-Agent': 'devonz-app',
-      },
+  return handleApiError('VercelDomains.loader', async () => {
+    const response = await externalFetch({
+      url: `${VERCEL_API_BASE}/v9/projects/${projectId}/domains`,
+      token: vercelToken,
     });
 
     if (!response.ok) {
@@ -96,30 +62,20 @@ async function vercelDomainsLoader({ request, context }: LoaderFunctionArgs) {
     const data = await response.json();
 
     return json(data);
-  } catch (error) {
-    logger.error('Vercel domains error:', error);
-
-    return json(
-      {
-        error: 'Failed to fetch domains',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
-    );
-  }
+  });
 }
 
 /**
  * Handle POST requests - add or remove domains
  */
 async function vercelDomainsAction({ request, context }: ActionFunctionArgs) {
-  const vercelToken = getVercelToken(request, context);
+  const vercelToken = resolveToken(request, context, 'VITE_VERCEL_ACCESS_TOKEN');
 
   if (!vercelToken) {
-    return json({ error: 'Vercel token not found' }, { status: 401 });
+    return unauthorizedResponse('Vercel');
   }
 
-  try {
+  return handleApiError('VercelDomains.action', async () => {
     const body: DomainRequest = await request.json();
     const { projectId, action, domain } = body;
 
@@ -132,21 +88,16 @@ async function vercelDomainsAction({ request, context }: ActionFunctionArgs) {
         return json({ error: 'Domain name is required for add action' }, { status: 400 });
       }
 
-      // Add the domain
-      const response = await fetch(`${VERCEL_API_BASE}/v9/projects/${projectId}/domains`, {
+      const response = await externalFetch({
+        url: `${VERCEL_API_BASE}/v9/projects/${projectId}/domains`,
+        token: vercelToken,
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${vercelToken}`,
-          'User-Agent': 'devonz-app',
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ name: domain }),
+        body: { name: domain },
       });
 
       const data = await response.json();
 
       if (!response.ok) {
-        // Handle specific error cases
         if (response.status === 409) {
           return json(
             {
@@ -187,16 +138,11 @@ async function vercelDomainsAction({ request, context }: ActionFunctionArgs) {
         return json({ error: 'Domain name is required for remove action' }, { status: 400 });
       }
 
-      const response = await fetch(
-        `${VERCEL_API_BASE}/v9/projects/${projectId}/domains/${encodeURIComponent(domain)}`,
-        {
-          method: 'DELETE',
-          headers: {
-            Authorization: `Bearer ${vercelToken}`,
-            'User-Agent': 'devonz-app',
-          },
-        },
-      );
+      const response = await externalFetch({
+        url: `${VERCEL_API_BASE}/v9/projects/${projectId}/domains/${encodeURIComponent(domain)}`,
+        token: vercelToken,
+        method: 'DELETE',
+      });
 
       if (!response.ok) {
         const data = await response.json();
@@ -214,11 +160,9 @@ async function vercelDomainsAction({ request, context }: ActionFunctionArgs) {
     }
 
     if (action === 'list') {
-      const response = await fetch(`${VERCEL_API_BASE}/v9/projects/${projectId}/domains`, {
-        headers: {
-          Authorization: `Bearer ${vercelToken}`,
-          'User-Agent': 'devonz-app',
-        },
+      const response = await externalFetch({
+        url: `${VERCEL_API_BASE}/v9/projects/${projectId}/domains`,
+        token: vercelToken,
       });
 
       if (!response.ok) {
@@ -239,17 +183,7 @@ async function vercelDomainsAction({ request, context }: ActionFunctionArgs) {
     }
 
     return json({ error: 'Invalid action. Use: list, add, or remove' }, { status: 400 });
-  } catch (error) {
-    logger.error('Vercel domains error:', error);
-
-    return json(
-      {
-        error: 'Failed to process domain request',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
-    );
-  }
+  });
 }
 
 export const loader = withSecurity(vercelDomainsLoader, {

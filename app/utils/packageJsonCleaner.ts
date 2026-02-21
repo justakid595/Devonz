@@ -1,10 +1,10 @@
 /**
- * Cleans up a package.json for WebContainer compatibility.
+ * Cleans up a package.json for compatibility.
  *
  * Many v0-generated projects include unnecessary dependencies
  * (expo, react-native, vue-router in React projects, etc.)
- * that fail to install in WebContainer. This utility strips
- * them out so `npm install` succeeds without manual intervention.
+ * that fail to install. This utility strips them out so
+ * `npm install` succeeds without manual intervention.
  */
 
 import { createScopedLogger } from '~/utils/logger';
@@ -12,11 +12,11 @@ import { createScopedLogger } from '~/utils/logger';
 const logger = createScopedLogger('PackageJsonCleaner');
 
 /**
- * Dependencies that should NEVER be installed in WebContainer.
+ * Dependencies that should NEVER be installed in a web project.
  * These are React Native / mobile-only packages that will fail.
  */
 const BLOCKLISTED_DEPENDENCIES = [
-  // React Native / Expo ecosystem (not compatible with WebContainer)
+  /* React Native / Expo ecosystem (not compatible with web projects) */
   'react-native',
   'react-native-web',
   'expo',
@@ -30,7 +30,7 @@ const BLOCKLISTED_DEPENDENCIES = [
   'expo-status-bar',
   'expo-splash-screen',
 
-  // Misplaced framework deps (e.g. Vue deps in a React/Next.js project)
+  /* Misplaced framework deps (e.g. Vue deps in a React/Next.js project) */
   '@nuxt/kit',
   '@nuxt/schema',
   'nuxi',
@@ -42,54 +42,8 @@ const BLOCKLISTED_DEPENDENCIES = [
  */
 const CONDITIONAL_BLOCKLIST: Record<string, { onlyRemoveIfMissing: string }> = {
   'vue-router': { onlyRemoveIfMissing: 'vue' },
-  vue: { onlyRemoveIfMissing: 'vue' }, // only remove if no .vue files detected
+  vue: { onlyRemoveIfMissing: 'vue' },
 };
-
-/**
- * WebContainer-compatible Next.js version.
- *
- * Next.js >= 15 triggers "workUnitAsyncStorage InvariantError" in WebContainer
- * because WebContainer's AsyncLocalStorage doesn't fully support Next.js 15's
- * server component lifecycle. Turbopack mode also fails because
- * `turbo.createProject` needs native bindings (WebContainer only has WASM).
- *
- * Next.js 14.0.x/14.1.x lack proper SWC WASM fallback — they try to load
- * native SWC binaries which aren't available in WebContainer.
- * Next.js 14.2+ automatically falls back to @next/swc-wasm-nodejs.
- *
- * Version 14.2.28 is the target: last patch of the 14.2.x series.
- */
-const WEBCONTAINER_NEXT_VERSION = '14.2.28';
-const WEBCONTAINER_REACT_VERSION = '^18.3.1';
-
-/**
- * When React is capped to 18.x, @react-three/fiber must stay at 8.x.
- * Version 9.x uses React 19's reconciler internals and crashes with:
- * "TypeError: Cannot read properties of undefined (reading 'S')"
- */
-const WEBCONTAINER_R3F_VERSION = '^8.17.10';
-
-/**
- * The minimum Next.js 14.x minor version with SWC WASM fallback support.
- * Versions below this (14.0.x, 14.1.x) fail in WebContainer with:
- * "Failed to load SWC binary for linux/x64"
- */
-const MIN_NEXT14_MINOR_FOR_WASM = 2;
-
-/**
- * Parse a semver-like version string to extract major and minor versions.
- * Handles formats like "14.2.28", "^15.0.0", "~16.1.6", "latest", "*".
- */
-function parseVersion(version: string): { major: number; minor: number } | null {
-  const match = version.replace(/^[\^~>=<]+/, '').match(/^(\d+)(?:\.(\d+))?/);
-  return match ? { major: parseInt(match[1], 10), minor: match[2] ? parseInt(match[2], 10) : 0 } : null;
-}
-
-/** Convenience: extract just the major version number. */
-function parseMajorVersion(version: string): number | null {
-  const v = parseVersion(version);
-  return v ? v.major : null;
-}
 
 interface CleanupResult {
   cleaned: boolean;
@@ -98,15 +52,15 @@ interface CleanupResult {
 }
 
 /**
- * Cleans a package.json string for WebContainer compatibility.
- * Removes dependencies that are known to fail in WebContainer.
- * Also caps Next.js to 14.x to avoid server rendering issues.
+ * Cleans a package.json by removing incompatible dependencies.
+ * Removes React Native, Expo, and misplaced framework deps that
+ * would cause `npm install` to fail.
  *
  * @param packageJsonContent - The raw package.json file content
  * @param projectFiles - Optional list of project file paths to help detect framework usage
  * @returns Cleaned package.json content and metadata about what was removed
  */
-export function cleanPackageJsonForWebContainer(packageJsonContent: string, projectFiles?: string[]): CleanupResult {
+export function cleanPackageJson(packageJsonContent: string, projectFiles?: string[]): CleanupResult {
   try {
     const pkg = JSON.parse(packageJsonContent);
     const removedDeps: string[] = [];
@@ -160,101 +114,14 @@ export function cleanPackageJsonForWebContainer(packageJsonContent: string, proj
       logger.info(`Cleaned package.json: removed ${removedDeps.length} incompatible deps:`, removedDeps);
     }
 
-    /*
-     * Pin Next.js to 14.2.28 for WebContainer compatibility:
-     * - Next.js 15+: causes "workUnitAsyncStorage" InvariantError (HTTP 500)
-     *   and Turbopack requires native bindings not available in WebContainer.
-     * - Next.js 14.0.x/14.1.x: tries to load native SWC binaries which aren't
-     *   available in WebContainer. 14.2+ falls back to @next/swc-wasm-nodejs.
-     */
-    const deps = pkg.dependencies || {};
-    const devDeps = pkg.devDependencies || {};
-    let versionCapped = false;
-
-    for (const depsObj of [deps, devDeps]) {
-      if (depsObj.next) {
-        const ver = parseVersion(depsObj.next);
-
-        if (ver !== null) {
-          const needsCap = ver.major >= 15 || (ver.major === 14 && ver.minor < MIN_NEXT14_MINOR_FOR_WASM);
-
-          if (needsCap) {
-            logger.info(`Pinning Next.js from ${depsObj.next} to ${WEBCONTAINER_NEXT_VERSION} for WebContainer`);
-            depsObj.next = WEBCONTAINER_NEXT_VERSION;
-            versionCapped = true;
-          }
-        }
-      }
-    }
-
-    // When Next.js is capped to 14.x, React/React-DOM must be 18.x (not 19.x)
-    if (versionCapped) {
-      for (const depsObj of [deps, devDeps]) {
-        if (depsObj.react) {
-          const reactMajor = parseMajorVersion(depsObj.react);
-
-          if (reactMajor !== null && reactMajor >= 19) {
-            depsObj.react = WEBCONTAINER_REACT_VERSION;
-          }
-        }
-
-        if (depsObj['react-dom']) {
-          const rdMajor = parseMajorVersion(depsObj['react-dom']);
-
-          if (rdMajor !== null && rdMajor >= 19) {
-            depsObj['react-dom'] = WEBCONTAINER_REACT_VERSION;
-          }
-        }
-
-        if (depsObj['@types/react']) {
-          const trMajor = parseMajorVersion(depsObj['@types/react']);
-
-          if (trMajor !== null && trMajor >= 19) {
-            depsObj['@types/react'] = WEBCONTAINER_REACT_VERSION;
-          }
-        }
-
-        if (depsObj['@types/react-dom']) {
-          const trdMajor = parseMajorVersion(depsObj['@types/react-dom']);
-
-          if (trdMajor !== null && trdMajor >= 19) {
-            depsObj['@types/react-dom'] = WEBCONTAINER_REACT_VERSION;
-          }
-        }
-
-        /*
-         * Cap @react-three/fiber to 8.x when React is pinned to 18.
-         * Version 9.x uses React 19 reconciler internals and crashes with:
-         * "TypeError: Cannot read properties of undefined (reading 'S')"
-         *
-         * Also cap 'latest' / '*' since those resolve to 9.x at install time.
-         */
-        if (depsObj['@react-three/fiber']) {
-          const r3fMajor = parseMajorVersion(depsObj['@react-three/fiber']);
-          const needsR3fCap = r3fMajor === null || r3fMajor >= 9;
-
-          if (needsR3fCap) {
-            logger.info(
-              `Capping @react-three/fiber from ${depsObj['@react-three/fiber']} to ${WEBCONTAINER_R3F_VERSION} (React 18)`,
-            );
-            depsObj['@react-three/fiber'] = WEBCONTAINER_R3F_VERSION;
-            removedDeps.push('@react-three/fiber capped to 8.x (React 18 compat)');
-          }
-        }
-      }
-
-      removedDeps.push('next version capped to 14.x (WebContainer compat)');
-    }
-
     return {
-      cleaned: removedDeps.length > 0 || versionCapped,
+      cleaned: removedDeps.length > 0,
       removedDeps,
       content: JSON.stringify(pkg, null, 2),
     };
   } catch (error) {
     logger.error('Failed to clean package.json:', error);
 
-    // Return original content if parsing fails
     return {
       cleaned: false,
       removedDeps: [],
@@ -264,48 +131,18 @@ export function cleanPackageJsonForWebContainer(packageJsonContent: string, proj
 }
 
 /**
- * Fonts unsupported by Next.js 14's `next/font/google` built-in font list.
- * These were added in Next.js 15+ and must be swapped to compatible alternatives.
+ * @deprecated No longer needed — local runtime supports all Next.js versions.
+ * Kept as a no-op for backwards compatibility with existing callers.
  */
-const FONT_REPLACEMENTS: [RegExp, string][] = [
-  /*
-   * Order matters: replace multiword names first to avoid partial matches.
-   * e.g. "Geist_Mono" must be replaced before "Geist".
-   */
-  [/\bGeist_Mono\b/g, 'Roboto_Mono'],
-  [/\bGeist\b/g, 'Inter'],
-];
+export function cleanPackageJsonForWebContainer(packageJsonContent: string, projectFiles?: string[]): CleanupResult {
+  return cleanPackageJson(packageJsonContent, projectFiles);
+}
 
 /**
- * Replaces unsupported Google Font references in source files for
- * WebContainer compatibility with Next.js 14.
- *
- * When Next.js is capped to 14.x, fonts like `Geist` and `Geist_Mono`
- * (added in 15+) cause `Unknown font` build errors. This replaces
- * them with visually similar fonts available in all versions.
- *
- * Only modifies files that import from `next/font/google`.
+ * @deprecated No longer needed — local runtime supports all Next.js versions
+ * and all Google Fonts are available natively.
+ * Kept as a no-op for backwards compatibility with existing callers.
  */
 export function replaceUnsupportedFonts(content: string): { content: string; replaced: boolean } {
-  if (!content.includes('next/font/google')) {
-    return { content, replaced: false };
-  }
-
-  let result = content;
-  let replaced = false;
-
-  for (const [pattern, replacement] of FONT_REPLACEMENTS) {
-    const updated = result.replace(pattern, replacement);
-
-    if (updated !== result) {
-      result = updated;
-      replaced = true;
-    }
-  }
-
-  if (replaced) {
-    logger.info('Replaced unsupported fonts in next/font/google usage');
-  }
-
-  return { content: result, replaced };
+  return { content, replaced: false };
 }

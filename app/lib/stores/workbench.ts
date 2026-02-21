@@ -1,8 +1,8 @@
-import { atom, map, type MapStore, type ReadableAtom, type WritableAtom } from 'nanostores';
+import { atom, computed, map, type MapStore, type ReadableAtom, type WritableAtom } from 'nanostores';
 import type { EditorDocument, ScrollPosition } from '~/components/editor/codemirror/CodeMirrorEditor';
 import { ActionRunner } from '~/lib/runtime/action-runner';
 import type { ActionCallbackData, ArtifactCallbackData } from '~/lib/runtime/message-parser';
-import { webcontainer } from '~/lib/webcontainer';
+import { runtime } from '~/lib/runtime';
 import type { ITerminal } from '~/types/terminal';
 import { unreachable } from '~/utils/unreachable';
 import { EditorStore } from './editor';
@@ -37,10 +37,10 @@ type Artifacts = MapStore<Record<string, ArtifactState>>;
 export type WorkbenchViewType = 'code' | 'diff' | 'preview' | 'versions';
 
 export class WorkbenchStore {
-  #previewsStore = new PreviewsStore(webcontainer);
-  #filesStore = new FilesStore(webcontainer);
+  #previewsStore = new PreviewsStore(runtime);
+  #filesStore = new FilesStore(runtime);
   #editorStore = new EditorStore(this.#filesStore);
-  #terminalStore = new TerminalStore(webcontainer);
+  #terminalStore = new TerminalStore(runtime);
 
   #reloadedMessages = new Set<string>();
 
@@ -122,6 +122,23 @@ export class WorkbenchStore {
 
   get filesCount(): number {
     return this.#filesStore.filesCount;
+  }
+
+  /**
+   * Computed atom that only changes when the set of file paths changes,
+   * not on content edits. Use this instead of subscribing to `files`
+   * when you only need to know which files exist.
+   */
+  get fileKeys(): ReadableAtom<string[]> {
+    return computed(this.files, (files) => Object.keys(files).sort());
+  }
+
+  /**
+   * Whether any files exist in the project. Cheaper than subscribing
+   * to the full files MapStore.
+   */
+  get hasFiles(): ReadableAtom<boolean> {
+    return computed(this.files, (files) => Object.keys(files).length > 0);
   }
 
   get showTerminal() {
@@ -542,7 +559,7 @@ export class WorkbenchStore {
       closed: false,
       type,
       runner: new ActionRunner(
-        webcontainer,
+        runtime,
         () => this.devonzTerminal,
         (alert) => {
           if (this.#reloadedMessages.has(messageId)) {
@@ -657,8 +674,8 @@ export class WorkbenchStore {
     }
 
     if (data.action.type === 'file') {
-      const wc = await webcontainer;
-      const fullPath = path.join(wc.workdir, data.action.filePath);
+      const rt = await runtime;
+      const fullPath = path.join(rt.workdir, data.action.filePath);
 
       /*
        * For scoped locks, we would need to implement diff checking here
@@ -685,7 +702,7 @@ export class WorkbenchStore {
 
       /*
        * When staging is enabled, run the action BEFORE updating the editor so
-       * that action-runner reads the true original content from WebContainer
+       * that action-runner reads the true original content from the runtime
        * for accurate diffs. Updating the editor first would cause the staging
        * system to capture already-modified content as "original".
        */

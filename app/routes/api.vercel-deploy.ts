@@ -6,14 +6,13 @@ import type {
   VercelApiError,
   VercelDeploymentConfig,
 } from '~/types/vercel';
-import { createScopedLogger } from '~/utils/logger';
+import { externalFetch, handleApiError } from '~/lib/api/apiUtils';
 import { withSecurity } from '~/lib/security';
+import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('VercelDeploy');
 
-// Function to detect framework from project files
 const detectFramework = (files: Record<string, string>): string => {
-  // Check for package.json first
   const packageJson = files['package.json'];
 
   if (packageJson) {
@@ -21,7 +20,6 @@ const detectFramework = (files: Record<string, string>): string => {
       const pkg = JSON.parse(packageJson);
       const dependencies = { ...pkg.dependencies, ...pkg.devDependencies };
 
-      // Check for specific frameworks
       if (dependencies.next) {
         return 'nextjs';
       }
@@ -70,12 +68,10 @@ const detectFramework = (files: Record<string, string>): string => {
         return 'react-native';
       }
 
-      // Generic React app
       if (dependencies.react) {
         return 'react';
       }
 
-      // Check for other frameworks
       if (dependencies['@angular/core']) {
         return 'angular';
       }
@@ -108,7 +104,6 @@ const detectFramework = (files: Record<string, string>): string => {
         return 'react-native';
       }
 
-      // Check for build tools
       if (dependencies.vite) {
         return 'vite';
       }
@@ -125,14 +120,12 @@ const detectFramework = (files: Record<string, string>): string => {
         return 'rollup';
       }
 
-      // Default to Node.js if package.json exists
       return 'nodejs';
     } catch (error) {
       logger.error('Error parsing package.json:', error);
     }
   }
 
-  // Check for other framework indicators
   if (files['next.config.js'] || files['next.config.ts']) {
     return 'nextjs';
   }
@@ -173,16 +166,13 @@ const detectFramework = (files: Record<string, string>): string => {
     return 'react-native';
   }
 
-  // Check for static site indicators
   if (files['index.html']) {
     return 'static';
   }
 
-  // Default to unknown
   return 'other';
 };
 
-// Add loader function to handle GET requests
 async function vercelDeployLoader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const projectId = url.searchParams.get('projectId');
@@ -192,12 +182,10 @@ async function vercelDeployLoader({ request }: LoaderFunctionArgs) {
     return json({ error: 'Missing projectId or token' }, { status: 400 });
   }
 
-  try {
-    // Get project info
-    const projectResponse = await fetch(`https://api.vercel.com/v9/projects/${projectId}`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+  return handleApiError('VercelDeploy.loader', async () => {
+    const projectResponse = await externalFetch({
+      url: `https://api.vercel.com/v9/projects/${projectId}`,
+      token,
     });
 
     if (!projectResponse.ok) {
@@ -206,11 +194,9 @@ async function vercelDeployLoader({ request }: LoaderFunctionArgs) {
 
     const projectData = (await projectResponse.json()) as VercelProject;
 
-    // Get latest deployment
-    const deploymentsResponse = await fetch(`https://api.vercel.com/v6/deployments?projectId=${projectId}&limit=1`, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-      },
+    const deploymentsResponse = await externalFetch({
+      url: `https://api.vercel.com/v6/deployments?projectId=${projectId}&limit=1`,
+      token,
     });
 
     if (!deploymentsResponse.ok) {
@@ -235,10 +221,7 @@ async function vercelDeployLoader({ request }: LoaderFunctionArgs) {
           }
         : null,
     });
-  } catch (error) {
-    logger.error('Error fetching Vercel deployment:', error);
-    return json({ error: 'Failed to fetch deployment' }, { status: 500 });
-  }
+  });
 }
 
 interface DeployRequestBody {
@@ -249,9 +232,8 @@ interface DeployRequestBody {
   framework?: string;
 }
 
-// Existing action function for POST requests
 async function vercelDeployAction({ request }: ActionFunctionArgs) {
-  try {
+  return handleApiError('VercelDeploy.action', async () => {
     const { projectId, files, sourceFiles, token, chatId, framework } = (await request.json()) as DeployRequestBody & {
       token: string;
     };
@@ -263,7 +245,6 @@ async function vercelDeployAction({ request }: ActionFunctionArgs) {
     let targetProjectId = projectId;
     let projectInfo: VercelProjectInfo | undefined;
 
-    // Detect framework from the source files if not provided
     let detectedFramework = framework;
 
     if (!detectedFramework && sourceFiles) {
@@ -271,19 +252,16 @@ async function vercelDeployAction({ request }: ActionFunctionArgs) {
       logger.info('Detected framework from source files:', detectedFramework);
     }
 
-    // If no projectId provided, create a new project
     if (!targetProjectId) {
       const projectName = `devonz-${chatId}-${Date.now()}`;
-      const createProjectResponse = await fetch('https://api.vercel.com/v9/projects', {
+      const createProjectResponse = await externalFetch({
+        url: 'https://api.vercel.com/v9/projects',
+        token,
         method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+        body: {
           name: projectName,
           framework: detectedFramework || null,
-        }),
+        },
       });
 
       if (!createProjectResponse.ok) {
@@ -303,11 +281,9 @@ async function vercelDeployAction({ request }: ActionFunctionArgs) {
         chatId,
       };
     } else {
-      // Get existing project info
-      const projectResponse = await fetch(`https://api.vercel.com/v9/projects/${targetProjectId}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const projectResponse = await externalFetch({
+        url: `https://api.vercel.com/v9/projects/${targetProjectId}`,
+        token,
       });
 
       if (projectResponse.ok) {
@@ -319,18 +295,15 @@ async function vercelDeployAction({ request }: ActionFunctionArgs) {
           chatId,
         };
       } else {
-        // If project doesn't exist, create a new one
         const projectName = `devonz-${chatId}-${Date.now()}`;
-        const createProjectResponse = await fetch('https://api.vercel.com/v9/projects', {
+        const createProjectResponse = await externalFetch({
+          url: 'https://api.vercel.com/v9/projects',
+          token,
           method: 'POST',
-          headers: {
-            Authorization: `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
+          body: {
             name: projectName,
             framework: detectedFramework || null,
-          }),
+          },
         });
 
         if (!createProjectResponse.ok) {
@@ -352,21 +325,14 @@ async function vercelDeployAction({ request }: ActionFunctionArgs) {
       }
     }
 
-    // Prepare files for deployment
     const deploymentFiles = [];
 
-    /*
-     * For frameworks that need to build on Vercel, include source files
-     * For static sites, only include build output
-     */
     const shouldIncludeSourceFiles =
       detectedFramework &&
       ['nextjs', 'react', 'vite', 'remix', 'nuxt', 'sveltekit', 'astro', 'vue', 'angular'].includes(detectedFramework);
 
     if (shouldIncludeSourceFiles && sourceFiles) {
-      // Include source files for frameworks that need to build
       for (const [filePath, content] of Object.entries(sourceFiles)) {
-        // Ensure file path doesn't start with a slash for Vercel
         const normalizedPath = filePath.startsWith('/') ? filePath.substring(1) : filePath;
         deploymentFiles.push({
           file: normalizedPath,
@@ -374,9 +340,7 @@ async function vercelDeployAction({ request }: ActionFunctionArgs) {
         });
       }
     } else {
-      // For static sites, only include build output
       for (const [filePath, content] of Object.entries(files)) {
-        // Ensure file path doesn't start with a slash for Vercel
         const normalizedPath = filePath.startsWith('/') ? filePath.substring(1) : filePath;
         deploymentFiles.push({
           file: normalizedPath,
@@ -385,7 +349,6 @@ async function vercelDeployAction({ request }: ActionFunctionArgs) {
       }
     }
 
-    // Create deployment configuration based on framework
     const deploymentConfig: VercelDeploymentConfig = {
       name: projectInfo.name,
       project: targetProjectId,
@@ -393,7 +356,6 @@ async function vercelDeployAction({ request }: ActionFunctionArgs) {
       files: deploymentFiles,
     };
 
-    // Add framework-specific configuration
     if (detectedFramework === 'nextjs') {
       deploymentConfig.buildCommand = 'npm run build';
       deploymentConfig.outputDirectory = '.next';
@@ -419,18 +381,14 @@ async function vercelDeployAction({ request }: ActionFunctionArgs) {
       deploymentConfig.buildCommand = 'npm run build';
       deploymentConfig.outputDirectory = 'dist';
     } else {
-      // For static sites, no build command needed
       deploymentConfig.routes = [{ src: '/(.*)', dest: '/$1' }];
     }
 
-    // Create a new deployment
-    const deployResponse = await fetch(`https://api.vercel.com/v13/deployments`, {
+    const deployResponse = await externalFetch({
+      url: 'https://api.vercel.com/v13/deployments',
+      token,
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(deploymentConfig),
+      body: deploymentConfig,
     });
 
     if (!deployResponse.ok) {
@@ -443,17 +401,15 @@ async function vercelDeployAction({ request }: ActionFunctionArgs) {
 
     const deployData = (await deployResponse.json()) as VercelDeployment;
 
-    // Poll for deployment status
     let retryCount = 0;
     const maxRetries = 60;
     let deploymentUrl = '';
     let deploymentState = '';
 
     while (retryCount < maxRetries) {
-      const statusResponse = await fetch(`https://api.vercel.com/v13/deployments/${deployData.id}`, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
+      const statusResponse = await externalFetch({
+        url: `https://api.vercel.com/v13/deployments/${deployData.id}`,
+        token,
       });
 
       if (statusResponse.ok) {
@@ -483,16 +439,11 @@ async function vercelDeployAction({ request }: ActionFunctionArgs) {
       deploy: {
         id: deployData.id,
         state: deploymentState,
-
-        // Return public domain as deploy URL and private domain as fallback.
         url: projectInfo.url || deploymentUrl,
       },
       project: projectInfo,
     });
-  } catch (error) {
-    logger.error('Vercel deploy error:', error);
-    return json({ error: 'Deployment failed' }, { status: 500 });
-  }
+  });
 }
 
 export const loader = withSecurity(vercelDeployLoader, {

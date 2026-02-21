@@ -1,9 +1,6 @@
 import { json, type LoaderFunctionArgs } from '@remix-run/node';
-import { getApiKeysFromCookie } from '~/lib/api/cookies';
+import { ApiError, externalFetch, handleApiError, resolveToken, unauthorizedResponse } from '~/lib/api/apiUtils';
 import { withSecurity } from '~/lib/security';
-import { createScopedLogger } from '~/utils/logger';
-
-const logger = createScopedLogger('GitHubBranches');
 
 interface GitHubBranch {
   name: string;
@@ -21,14 +18,15 @@ interface BranchInfo {
   isDefault: boolean;
 }
 
+const GH_HEADERS = { Accept: 'application/vnd.github.v3+json' };
+
 async function githubBranchesLoader({ request, context }: LoaderFunctionArgs) {
-  try {
+  return handleApiError('GitHubBranches', async () => {
     let owner: string;
     let repo: string;
     let githubToken: string;
 
     if (request.method === 'POST') {
-      // Handle POST request with token in body (from BranchSelector)
       const body = (await request.json()) as { owner: string; repo: string; token: string };
       owner = body.owner;
       repo = body.repo;
@@ -42,7 +40,6 @@ async function githubBranchesLoader({ request, context }: LoaderFunctionArgs) {
         return json({ error: 'GitHub token is required' }, { status: 400 });
       }
     } else {
-      // Handle GET request with params and cookie token (backwards compatibility)
       const url = new URL(request.url);
       owner = url.searchParams.get('owner') || '';
       repo = url.searchParams.get('repo') || '';
@@ -51,32 +48,18 @@ async function githubBranchesLoader({ request, context }: LoaderFunctionArgs) {
         return json({ error: 'Owner and repo parameters are required' }, { status: 400 });
       }
 
-      // Get API keys from cookies (server-side only)
-      const cookieHeader = request.headers.get('Cookie');
-      const apiKeys = getApiKeysFromCookie(cookieHeader);
-
-      // Try to get GitHub token from various sources
-      githubToken =
-        apiKeys.GITHUB_API_KEY ||
-        apiKeys.VITE_GITHUB_ACCESS_TOKEN ||
-        context?.cloudflare?.env?.GITHUB_TOKEN ||
-        context?.cloudflare?.env?.VITE_GITHUB_ACCESS_TOKEN ||
-        process.env.GITHUB_TOKEN ||
-        process.env.VITE_GITHUB_ACCESS_TOKEN ||
-        '';
+      const token = resolveToken(request, context, 'GITHUB_API_KEY', 'VITE_GITHUB_ACCESS_TOKEN', 'GITHUB_TOKEN');
+      githubToken = token || '';
     }
 
     if (!githubToken) {
-      return json({ error: 'GitHub token not found' }, { status: 401 });
+      return unauthorizedResponse('GitHub');
     }
 
-    // First, get repository info to know the default branch
-    const repoResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}`, {
-      headers: {
-        Accept: 'application/vnd.github.v3+json',
-        Authorization: `Bearer ${githubToken}`,
-        'User-Agent': 'devonz-app',
-      },
+    const repoResponse = await externalFetch({
+      url: `https://api.github.com/repos/${owner}/${repo}`,
+      token: githubToken,
+      headers: GH_HEADERS,
     });
 
     if (!repoResponse.ok) {
@@ -88,28 +71,24 @@ async function githubBranchesLoader({ request, context }: LoaderFunctionArgs) {
         return json({ error: 'Invalid GitHub token' }, { status: 401 });
       }
 
-      throw new Error(`GitHub API error: ${repoResponse.status}`);
+      throw new ApiError(`GitHub API error: ${repoResponse.status}`, repoResponse.status);
     }
 
     const repoInfo = (await repoResponse.json()) as { default_branch: string };
     const defaultBranch = repoInfo.default_branch;
 
-    // Fetch branches
-    const branchesResponse = await fetch(`https://api.github.com/repos/${owner}/${repo}/branches?per_page=100`, {
-      headers: {
-        Accept: 'application/vnd.github.v3+json',
-        Authorization: `Bearer ${githubToken}`,
-        'User-Agent': 'devonz-app',
-      },
+    const branchesResponse = await externalFetch({
+      url: `https://api.github.com/repos/${owner}/${repo}/branches?per_page=100`,
+      token: githubToken,
+      headers: GH_HEADERS,
     });
 
     if (!branchesResponse.ok) {
-      throw new Error(`Failed to fetch branches: ${branchesResponse.status}`);
+      throw new ApiError(`Failed to fetch branches: ${branchesResponse.status}`, branchesResponse.status);
     }
 
     const branches: GitHubBranch[] = await branchesResponse.json();
 
-    // Transform to our format
     const transformedBranches: BranchInfo[] = branches.map((branch) => ({
       name: branch.name,
       sha: branch.commit.sha,
@@ -117,7 +96,6 @@ async function githubBranchesLoader({ request, context }: LoaderFunctionArgs) {
       isDefault: branch.name === defaultBranch,
     }));
 
-    // Sort branches with default branch first, then alphabetically
     transformedBranches.sort((a, b) => {
       if (a.isDefault) {
         return -1;
@@ -135,34 +113,7 @@ async function githubBranchesLoader({ request, context }: LoaderFunctionArgs) {
       defaultBranch,
       total: transformedBranches.length,
     });
-  } catch (error) {
-    logger.error('Failed to fetch GitHub branches:', error);
-
-    if (error instanceof Error) {
-      if (error.message.includes('fetch')) {
-        return json(
-          {
-            error: 'Failed to connect to GitHub. Please check your network connection.',
-          },
-          { status: 503 },
-        );
-      }
-
-      return json(
-        {
-          error: `Failed to fetch branches: ${error.message}`,
-        },
-        { status: 500 },
-      );
-    }
-
-    return json(
-      {
-        error: 'An unexpected error occurred while fetching branches',
-      },
-      { status: 500 },
-    );
-  }
+  });
 }
 
 export const loader = withSecurity(githubBranchesLoader);

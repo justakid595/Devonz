@@ -1,6 +1,6 @@
-import type { WebContainer, BufferEncoding as WCBufferEncoding } from '@webcontainer/api';
+import type { RuntimeProvider } from '~/lib/runtime/runtime-provider';
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from 'react';
-import { webcontainer as webcontainerPromise } from '~/lib/webcontainer';
+import { runtime as runtimePromise } from '~/lib/runtime';
 import git, { type GitAuth, type PromiseFsClient } from 'isomorphic-git';
 import http from 'isomorphic-git/http/web';
 import Cookies from 'js-cookie';
@@ -38,13 +38,13 @@ const saveGitAuth = (url: string, auth: GitAuth) => {
 
 export function useGit() {
   const [ready, setReady] = useState(false);
-  const [webcontainer, setWebcontainer] = useState<WebContainer>();
+  const [runtimeInstance, setRuntimeInstance] = useState<RuntimeProvider>();
   const [fs, setFs] = useState<PromiseFsClient>();
   const fileData = useRef<Record<string, FileEntry>>({});
   useEffect(() => {
-    webcontainerPromise.then((container) => {
+    runtimePromise.then((container) => {
       fileData.current = {};
-      setWebcontainer(container);
+      setRuntimeInstance(container);
       setFs(getFs(container, fileData));
       setReady(true);
     });
@@ -52,8 +52,8 @@ export function useGit() {
 
   const gitClone = useCallback(
     async (url: string, retryCount = 0) => {
-      if (!webcontainer || !fs || !ready) {
-        throw new Error('Webcontainer not initialized. Please try again later.');
+      if (!runtimeInstance || !fs || !ready) {
+        throw new Error('Runtime not initialized. Please try again later.');
       }
 
       fileData.current = {};
@@ -92,7 +92,7 @@ export function useGit() {
         await git.clone({
           fs,
           http,
-          dir: webcontainer.workdir,
+          dir: runtimeInstance.workdir,
           url: baseUrl,
           depth: 1,
           singleBranch: true,
@@ -143,7 +143,7 @@ export function useGit() {
           data[key] = value;
         }
 
-        return { workdir: webcontainer.workdir, data };
+        return { workdir: runtimeInstance.workdir, data };
       } catch (error) {
         logger.error('Git clone error:', error);
 
@@ -183,110 +183,71 @@ export function useGit() {
         }
       }
     },
-    [webcontainer, fs, ready],
+    [runtimeInstance, fs, ready],
   );
 
   return { ready, gitClone };
 }
 
-const getFs = (webcontainer: WebContainer, record: MutableRefObject<Record<string, FileEntry>>) => ({
+const getFs = (rt: RuntimeProvider, record: MutableRefObject<Record<string, FileEntry>>) => ({
   promises: {
     readFile: async (path: string, options?: { encoding?: string }) => {
       const encoding = options?.encoding;
-      const relativePath = pathUtils.relative(webcontainer.workdir, path);
+      const relativePath = pathUtils.relative(rt.workdir, path);
 
-      try {
-        if (encoding) {
-          return await webcontainer.fs.readFile(relativePath, encoding as WCBufferEncoding);
-        }
-
-        return await webcontainer.fs.readFile(relativePath);
-      } catch (error) {
-        throw error;
+      if (encoding) {
+        return await rt.fs.readFile(relativePath);
       }
+
+      return await rt.fs.readFileRaw(relativePath);
     },
     writeFile: async (path: string, data: Uint8Array | string, options: { encoding?: string } = {}) => {
-      const relativePath = pathUtils.relative(webcontainer.workdir, path);
+      const relativePath = pathUtils.relative(rt.workdir, path);
 
       if (record.current) {
         record.current[relativePath] = { data, encoding: options?.encoding };
       }
 
-      try {
-        // Handle encoding properly based on data type
-        if (data instanceof Uint8Array) {
-          // For binary data, don't pass encoding
-          const result = await webcontainer.fs.writeFile(relativePath, data);
-          return result;
-        } else {
-          // For text data, use the encoding if provided
-          const encoding = options?.encoding || 'utf8';
-          const result = await webcontainer.fs.writeFile(relativePath, data, encoding);
-
-          return result;
-        }
-      } catch (error) {
-        throw error;
-      }
+      await rt.fs.writeFile(relativePath, data);
     },
     mkdir: async (path: string, options?: { recursive?: boolean; mode?: number }) => {
-      const relativePath = pathUtils.relative(webcontainer.workdir, path);
-
-      try {
-        const result = await webcontainer.fs.mkdir(relativePath, { ...options, recursive: true });
-
-        return result;
-      } catch (error) {
-        throw error;
-      }
+      const relativePath = pathUtils.relative(rt.workdir, path);
+      await rt.fs.mkdir(relativePath, { recursive: options?.recursive ?? true });
     },
     readdir: async (path: string, options?: { withFileTypes?: boolean }) => {
-      const relativePath = pathUtils.relative(webcontainer.workdir, path);
+      const relativePath = pathUtils.relative(rt.workdir, path);
 
-      try {
-        if (options?.withFileTypes) {
-          return await webcontainer.fs.readdir(relativePath, { withFileTypes: true as const });
-        }
+      if (options?.withFileTypes) {
+        /* Wrap DirEntry booleans as methods for isomorphic-git compatibility */
+        const entries = await rt.fs.readdir(relativePath);
 
-        return await webcontainer.fs.readdir(relativePath);
-      } catch (error) {
-        throw error;
+        return entries.map((entry) => ({
+          name: entry.name,
+          isFile: () => entry.isFile,
+          isDirectory: () => entry.isDirectory,
+        }));
       }
+
+      const entries = await rt.fs.readdir(relativePath);
+
+      return entries.map((entry) => entry.name);
     },
     rm: async (path: string, options?: { recursive?: boolean; force?: boolean }) => {
-      const relativePath = pathUtils.relative(webcontainer.workdir, path);
-
-      try {
-        const result = await webcontainer.fs.rm(relativePath, { ...(options || {}) });
-
-        return result;
-      } catch (error) {
-        throw error;
-      }
+      const relativePath = pathUtils.relative(rt.workdir, path);
+      await rt.fs.rm(relativePath, { ...(options || {}) });
     },
     rmdir: async (path: string, options?: { recursive?: boolean }) => {
-      const relativePath = pathUtils.relative(webcontainer.workdir, path);
-
-      try {
-        const result = await webcontainer.fs.rm(relativePath, { recursive: true, ...options });
-
-        return result;
-      } catch (error) {
-        throw error;
-      }
+      const relativePath = pathUtils.relative(rt.workdir, path);
+      await rt.fs.rm(relativePath, { recursive: true, ...options });
     },
     unlink: async (path: string) => {
-      const relativePath = pathUtils.relative(webcontainer.workdir, path);
+      const relativePath = pathUtils.relative(rt.workdir, path);
 
-      try {
-        return await webcontainer.fs.rm(relativePath, { recursive: false });
-      } catch (error) {
-        throw error;
-      }
+      return await rt.fs.rm(relativePath, { recursive: false });
     },
     stat: async (path: string) => {
       try {
-        const relativePath = pathUtils.relative(webcontainer.workdir, path);
+        const relativePath = pathUtils.relative(rt.workdir, path);
         const dirPath = pathUtils.dirname(relativePath);
         const fileName = pathUtils.basename(relativePath);
 
@@ -296,8 +257,8 @@ const getFs = (webcontainer: WebContainer, record: MutableRefObject<Record<strin
             isFile: () => true,
             isDirectory: () => false,
             isSymbolicLink: () => false,
-            size: 12, // Size of our empty index
-            mode: 0o100644, // Regular file
+            size: 12,
+            mode: 0o100644,
             mtimeMs: Date.now(),
             ctimeMs: Date.now(),
             birthtimeMs: Date.now(),
@@ -317,7 +278,7 @@ const getFs = (webcontainer: WebContainer, record: MutableRefObject<Record<strin
           };
         }
 
-        const resp = await webcontainer.fs.readdir(dirPath, { withFileTypes: true });
+        const resp = await rt.fs.readdir(dirPath);
         const fileInfo = resp.find((x) => x.name === fileName);
 
         if (!fileInfo) {
@@ -330,11 +291,11 @@ const getFs = (webcontainer: WebContainer, record: MutableRefObject<Record<strin
         }
 
         return {
-          isFile: () => fileInfo.isFile(),
-          isDirectory: () => fileInfo.isDirectory(),
+          isFile: () => fileInfo.isFile,
+          isDirectory: () => fileInfo.isDirectory,
           isSymbolicLink: () => false,
-          size: fileInfo.isDirectory() ? 4096 : 1,
-          mode: fileInfo.isDirectory() ? 0o040755 : 0o100644, // Directory or regular file
+          size: fileInfo.isDirectory ? 4096 : 1,
+          mode: fileInfo.isDirectory ? 0o040755 : 0o100644,
           mtimeMs: Date.now(),
           ctimeMs: Date.now(),
           birthtimeMs: Date.now(),
@@ -366,23 +327,23 @@ const getFs = (webcontainer: WebContainer, record: MutableRefObject<Record<strin
       }
     },
     lstat: async (path: string) => {
-      return await getFs(webcontainer, record).promises.stat(path);
+      return await getFs(rt, record).promises.stat(path);
     },
     readlink: async (path: string) => {
       throw new Error(`EINVAL: invalid argument, readlink '${path}'`);
     },
     symlink: async (target: string, path: string) => {
       /*
-       * Since WebContainer doesn't support symlinks,
-       * we'll throw a "operation not supported" error
+       * Symlinks are not supported in this runtime adapter.
+       * Throw an "operation not supported" error.
        */
       throw new Error(`EPERM: operation not permitted, symlink '${target}' -> '${path}'`);
     },
 
     chmod: async (_path: string, _mode: number) => {
       /*
-       * WebContainer doesn't support changing permissions,
-       * but we can pretend it succeeded for compatibility
+       * chmod is a no-op for compatibility — the local runtime
+       * handles permissions natively at the OS level.
        */
       return await Promise.resolve();
     },

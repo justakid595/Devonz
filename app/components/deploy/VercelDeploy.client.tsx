@@ -2,7 +2,7 @@ import { toast } from 'react-toastify';
 import { useStore } from '@nanostores/react';
 import { vercelConnection } from '~/lib/stores/vercel';
 import { workbenchStore } from '~/lib/stores/workbench';
-import { webcontainer } from '~/lib/webcontainer';
+import { runtime } from '~/lib/runtime';
 import { path } from '~/utils/path';
 import { useState } from 'react';
 import type { ActionCallbackData } from '~/lib/runtime/message-parser';
@@ -83,7 +83,7 @@ export function useVercelDeploy() {
       deployArtifact.runner.handleDeployAction('deploying', 'running', { source: 'vercel' });
 
       // Get the build files
-      const container = await webcontainer;
+      const container = await runtime;
 
       // Remove /home/project from buildPath if it exists
       const buildPath = buildOutput.path.replace('/home/project', '');
@@ -116,18 +116,18 @@ export function useVercelDeploy() {
       // Get all files recursively
       async function getAllFiles(dirPath: string): Promise<Record<string, string>> {
         const files: Record<string, string> = {};
-        const entries = await container.fs.readdir(dirPath, { withFileTypes: true });
+        const entries = await container.fs.readdir(dirPath);
 
         for (const entry of entries) {
           const fullPath = path.join(dirPath, entry.name);
 
-          if (entry.isFile()) {
-            const content = await container.fs.readFile(fullPath, 'utf-8');
+          if (entry.isFile) {
+            const content = await container.fs.readFile(fullPath);
 
             // Remove build path prefix from the path
             const deployPath = fullPath.replace(finalBuildPath, '');
             files[deployPath] = content;
-          } else if (entry.isDirectory()) {
+          } else if (entry.isDirectory) {
             const subFiles = await getAllFiles(fullPath);
             Object.assign(files, subFiles);
           }
@@ -142,14 +142,14 @@ export function useVercelDeploy() {
       const allProjectFiles: Record<string, string> = {};
 
       async function getAllProjectFiles(dirPath: string): Promise<void> {
-        const entries = await container.fs.readdir(dirPath, { withFileTypes: true });
+        const entries = await container.fs.readdir(dirPath);
 
         for (const entry of entries) {
           const fullPath = path.join(dirPath, entry.name);
 
-          if (entry.isFile()) {
+          if (entry.isFile) {
             try {
-              const content = await container.fs.readFile(fullPath, 'utf-8');
+              const content = await container.fs.readFile(fullPath);
 
               // Store with relative path from project root
               let relativePath = fullPath;
@@ -165,7 +165,7 @@ export function useVercelDeploy() {
               // Skip binary files or files that can't be read as text
               logger.debug(`Skipping file ${entry.name}: ${error}`);
             }
-          } else if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+          } else if (entry.isDirectory && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
             await getAllProjectFiles(fullPath);
           }
         }

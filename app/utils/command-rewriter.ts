@@ -10,11 +10,10 @@ export interface RewriteResult {
 }
 
 /**
- * Rewrites unsupported runtime commands to Node.js equivalents
- * for WebContainer compatibility.
+ * Rewrites unsupported runtime commands to Node.js equivalents.
  *
- * WebContainer only supports Node.js — Python, Ruby, PHP, etc. are not available.
- * When AI models generate commands using these runtimes, we transparently
+ * When AI models generate commands using runtimes that may not be
+ * available on the host (Python, Ruby, PHP, etc.), we transparently
  * rewrite them to the closest Node.js equivalent so the preview works.
  */
 export function rewriteUnsupportedCommand(command: string): RewriteResult {
@@ -35,7 +34,7 @@ export function rewriteUnsupportedCommand(command: string): RewriteResult {
       command: rewritten,
       wasRewritten: true,
       originalCommand: trimmed,
-      reason: `WebContainer has no Python runtime. Replaced with Node.js serve on port ${port}.`,
+      reason: `Python runtime not detected. Replaced with Node.js serve on port ${port}.`,
     };
   }
 
@@ -51,7 +50,7 @@ export function rewriteUnsupportedCommand(command: string): RewriteResult {
       command: rewritten,
       wasRewritten: true,
       originalCommand: trimmed,
-      reason: `WebContainer has no Python runtime. Replaced with Node.js serve on port ${port}.`,
+      reason: `Python 2 runtime not detected. Replaced with Node.js serve on port ${port}.`,
     };
   }
 
@@ -67,7 +66,7 @@ export function rewriteUnsupportedCommand(command: string): RewriteResult {
       command: rewritten,
       wasRewritten: true,
       originalCommand: trimmed,
-      reason: `WebContainer has no PHP runtime. Replaced with Node.js serve on port ${port}.`,
+      reason: `PHP runtime not detected. Replaced with Node.js serve on port ${port}.`,
     };
   }
 
@@ -83,7 +82,7 @@ export function rewriteUnsupportedCommand(command: string): RewriteResult {
       command: rewritten,
       wasRewritten: true,
       originalCommand: trimmed,
-      reason: `WebContainer has no Ruby runtime. Replaced with Node.js serve on port ${port}.`,
+      reason: `Ruby runtime not detected. Replaced with Node.js serve on port ${port}.`,
     };
   }
 
@@ -116,18 +115,18 @@ export function rewriteUnsupportedCommand(command: string): RewriteResult {
         command: rewritten,
         wasRewritten: true,
         originalCommand: trimmed,
-        reason: `WebContainer has no Python runtime. Detected "${scriptName}" as HTTP server — replaced with Node.js serve on port ${port}.`,
+        reason: `Python runtime not detected. Detected "${scriptName}" as HTTP server — replaced with Node.js serve on port ${port}.`,
       };
     }
 
     // Non-server Python script — show error
-    logger.warn(`Cannot run Python script in WebContainer: ${trimmed}`);
+    logger.warn(`Cannot run Python script: ${trimmed}`);
 
     return {
-      command: `echo "Error: WebContainer only supports Node.js. Cannot run: ${trimmed.replace(/"/g, '\\"')}"`,
+      command: `echo "Error: Python is not available. Cannot run: ${trimmed.replace(/"/g, '\\"')}"`,
       wasRewritten: true,
       originalCommand: trimmed,
-      reason: 'WebContainer only supports Node.js. Python scripts cannot be executed.',
+      reason: 'Python runtime not detected. Python scripts cannot be executed.',
     };
   }
 
@@ -136,13 +135,13 @@ export function rewriteUnsupportedCommand(command: string): RewriteResult {
 
   if (genericUnsupported) {
     const runtime = genericUnsupported[1];
-    logger.warn(`Unsupported runtime "${runtime}" in WebContainer: ${trimmed}`);
+    logger.warn(`Unsupported runtime "${runtime}": ${trimmed}`);
 
     return {
-      command: `echo "Error: WebContainer only supports Node.js. Cannot run ${runtime} commands: ${trimmed.replace(/"/g, '\\"')}"`,
+      command: `echo "Error: ${runtime} is not available. Cannot run: ${trimmed.replace(/"/g, '\\"')}"`,
       wasRewritten: true,
       originalCommand: trimmed,
-      reason: `WebContainer only supports Node.js. ${runtime} is not available.`,
+      reason: `${runtime} runtime not detected.`,
     };
   }
 

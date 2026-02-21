@@ -31,7 +31,7 @@ import { useChatHistory } from '~/lib/persistence';
 import { streamingState } from '~/lib/stores/streaming';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import { usePlanSync } from '~/lib/hooks/usePlanSync';
-import { webcontainer } from '~/lib/webcontainer';
+import { runtime } from '~/lib/runtime';
 import { WORK_DIR } from '~/utils/constants';
 
 const workbenchLogger = createScopedLogger('Workbench');
@@ -108,8 +108,10 @@ export const Workbench = memo(
           const previewStore = usePreviewStore();
           previewStore.refreshAllPreviews();
 
-          // Auto-start static server fallback:
-          // If no start action was run and no previews exist, serve static files
+          /*
+           * Auto-start static server fallback:
+           * If no start action was run and no previews exist, serve static files
+           */
           const previews = workbenchStore.previews.get();
           const artifacts = workbenchStore.artifacts.get();
           const hasStartAction = Object.values(artifacts).some((artifact) =>
@@ -128,14 +130,14 @@ export const Workbench = memo(
             );
 
             if (hasPackageJson && !hasShellAction) {
-              workbenchLogger.info('No shell/start action found with package.json — auto-installing and starting dev server');
+              workbenchLogger.info(
+                'No shell/start action found with package.json — auto-installing and starting dev server',
+              );
 
               let devCommand = 'npm run dev';
 
               try {
-                const pkgEntry = Object.entries(currentFiles).find(
-                  ([k]) => k.endsWith('/package.json'),
-                );
+                const pkgEntry = Object.entries(currentFiles).find(([k]) => k.endsWith('/package.json'));
 
                 if (pkgEntry && pkgEntry[1]?.type === 'file') {
                   const pkg = JSON.parse(pkgEntry[1].content || '{}');
@@ -170,8 +172,8 @@ export const Workbench = memo(
               if (hasIndexHtml) {
                 workbenchLogger.info('No start action found — launching static file server for index.html');
 
-                webcontainer.then((wc) => {
-                  wc.spawn('npx', ['--yes', 'serve', '.'], {
+                runtime.then((rt) => {
+                  rt.spawn('npx', ['--yes', 'serve', '.'], {
                     cwd: WORK_DIR,
                     env: { NODE_ENV: 'development' },
                   }).catch((err) => {

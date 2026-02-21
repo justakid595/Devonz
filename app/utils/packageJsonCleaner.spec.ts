@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { cleanPackageJsonForWebContainer, replaceUnsupportedFonts } from './packageJsonCleaner';
+import { cleanPackageJson, cleanPackageJsonForWebContainer, replaceUnsupportedFonts } from './packageJsonCleaner';
 
-describe('cleanPackageJsonForWebContainer', () => {
+describe('cleanPackageJson', () => {
   it('should remove expo and react-native dependencies', () => {
     const pkg = JSON.stringify({
       dependencies: {
@@ -16,7 +16,7 @@ describe('cleanPackageJsonForWebContainer', () => {
       },
     });
 
-    const result = cleanPackageJsonForWebContainer(pkg);
+    const result = cleanPackageJson(pkg);
 
     expect(result.cleaned).toBe(true);
     expect(result.removedDeps).toContain('expo (dependencies)');
@@ -27,10 +27,10 @@ describe('cleanPackageJsonForWebContainer', () => {
 
     const cleaned = JSON.parse(result.content);
 
-    // Next.js 16 should be capped to 14.2.28 and react 19 → 18
-    expect(cleaned.dependencies.next).toBe('14.2.28');
-    expect(cleaned.dependencies.react).toBe('^18.3.1');
-    expect(cleaned.dependencies['react-dom']).toBe('^18.3.1');
+    /* Local runtime supports all Next.js and React versions — no pinning */
+    expect(cleaned.dependencies.next).toBe('16.1.6');
+    expect(cleaned.dependencies.react).toBe('^19');
+    expect(cleaned.dependencies['react-dom']).toBe('^19');
     expect(cleaned.dependencies.expo).toBeUndefined();
     expect(cleaned.dependencies['react-native']).toBeUndefined();
   });
@@ -44,7 +44,7 @@ describe('cleanPackageJsonForWebContainer', () => {
       },
     });
 
-    const result = cleanPackageJsonForWebContainer(pkg);
+    const result = cleanPackageJson(pkg);
 
     expect(result.cleaned).toBe(true);
     expect(result.removedDeps).toContain('@nuxt/kit (dependencies)');
@@ -62,7 +62,7 @@ describe('cleanPackageJsonForWebContainer', () => {
       },
     });
 
-    const result = cleanPackageJsonForWebContainer(pkg, ['app/page.tsx', 'app/layout.tsx']);
+    const result = cleanPackageJson(pkg, ['app/page.tsx', 'app/layout.tsx']);
 
     expect(result.cleaned).toBe(true);
     expect(result.removedDeps).toContain('vue-router (dependencies, unused)');
@@ -76,13 +76,13 @@ describe('cleanPackageJsonForWebContainer', () => {
       },
     });
 
-    const result = cleanPackageJsonForWebContainer(pkg, ['src/App.vue', 'src/Home.vue']);
+    const result = cleanPackageJson(pkg, ['src/App.vue', 'src/Home.vue']);
 
     expect(result.cleaned).toBe(false);
     expect(result.removedDeps).toHaveLength(0);
   });
 
-  it('should cap Next.js 15+ and React 19 for WebContainer compatibility', () => {
+  it('should NOT cap Next.js or React versions (local runtime supports all)', () => {
     const pkg = JSON.stringify({
       dependencies: {
         react: '^19',
@@ -98,23 +98,23 @@ describe('cleanPackageJsonForWebContainer', () => {
       },
     });
 
-    const result = cleanPackageJsonForWebContainer(pkg);
+    const result = cleanPackageJson(pkg);
 
-    expect(result.cleaned).toBe(true);
+    expect(result.cleaned).toBe(false);
 
     const cleaned = JSON.parse(result.content);
-    expect(cleaned.dependencies.next).toBe('14.2.28');
-    expect(cleaned.dependencies.react).toBe('^18.3.1');
-    expect(cleaned.dependencies['react-dom']).toBe('^18.3.1');
-    expect(cleaned.devDependencies['@types/react']).toBe('^18.3.1');
-    expect(cleaned.devDependencies['@types/react-dom']).toBe('^18.3.1');
+    expect(cleaned.dependencies.next).toBe('15.5.12');
+    expect(cleaned.dependencies.react).toBe('^19');
+    expect(cleaned.dependencies['react-dom']).toBe('^19');
+    expect(cleaned.devDependencies['@types/react']).toBe('^19');
+    expect(cleaned.devDependencies['@types/react-dom']).toBe('^19');
 
-    // Non-React deps should be untouched
+    /* Non-React deps should be untouched */
     expect(cleaned.dependencies['framer-motion']).toBe('12.23.12');
     expect(cleaned.devDependencies.typescript).toBe('^5');
   });
 
-  it('should not cap Next.js 14.x (already compatible)', () => {
+  it('should leave Next.js 14.x versions untouched', () => {
     const pkg = JSON.stringify({
       dependencies: {
         react: '^18.0.0',
@@ -123,7 +123,7 @@ describe('cleanPackageJsonForWebContainer', () => {
       },
     });
 
-    const result = cleanPackageJsonForWebContainer(pkg);
+    const result = cleanPackageJson(pkg);
 
     expect(result.cleaned).toBe(false);
 
@@ -133,7 +133,7 @@ describe('cleanPackageJsonForWebContainer', () => {
   });
 
   it('should handle malformed package.json gracefully', () => {
-    const result = cleanPackageJsonForWebContainer('not valid json');
+    const result = cleanPackageJson('not valid json');
 
     expect(result.cleaned).toBe(false);
     expect(result.content).toBe('not valid json');
@@ -141,7 +141,7 @@ describe('cleanPackageJsonForWebContainer', () => {
 
   it('should handle package.json with no dependencies', () => {
     const pkg = JSON.stringify({ name: 'test', version: '1.0.0' });
-    const result = cleanPackageJsonForWebContainer(pkg);
+    const result = cleanPackageJson(pkg);
 
     expect(result.cleaned).toBe(false);
   });
@@ -156,7 +156,7 @@ describe('cleanPackageJsonForWebContainer', () => {
       },
     });
 
-    const result = cleanPackageJsonForWebContainer(pkg);
+    const result = cleanPackageJson(pkg);
 
     expect(result.cleaned).toBe(true);
     expect(result.removedDeps).toContain('expo-camera (dependencies)');
@@ -182,24 +182,24 @@ describe('cleanPackageJsonForWebContainer', () => {
       },
     });
 
-    const result = cleanPackageJsonForWebContainer(pkg);
+    const result = cleanPackageJson(pkg);
 
     expect(result.cleaned).toBe(true);
 
     const cleaned = JSON.parse(result.content);
     expect(cleaned.dependencies['@react-three/drei']).toBe('latest');
-    expect(cleaned.dependencies['@react-three/fiber']).toBe('^8.17.10');
+    expect(cleaned.dependencies['@react-three/fiber']).toBe('latest');
     expect(cleaned.dependencies.three).toBe('latest');
 
-    // Next.js 16 capped to 14 and react 19 → 18
-    expect(cleaned.dependencies.next).toBe('14.2.28');
-    expect(cleaned.dependencies.react).toBe('^18.3.1');
-    expect(cleaned.dependencies['react-dom']).toBe('^18.3.1');
+    /* Local runtime supports all versions — no pinning */
+    expect(cleaned.dependencies.next).toBe('16.1.6');
+    expect(cleaned.dependencies.react).toBe('^19.2.4');
+    expect(cleaned.dependencies['react-dom']).toBe('^19.2.4');
     expect(cleaned.dependencies.expo).toBeUndefined();
     expect(cleaned.dependencies['react-native']).toBeUndefined();
   });
 
-  it('should cap @react-three/fiber 9.x to 8.x when React is pinned to 18', () => {
+  it('should NOT cap @react-three/fiber (local runtime supports React 19)', () => {
     const pkg = JSON.stringify({
       dependencies: {
         '@react-three/fiber': '^9.1.0',
@@ -211,19 +211,18 @@ describe('cleanPackageJsonForWebContainer', () => {
       },
     });
 
-    const result = cleanPackageJsonForWebContainer(pkg);
+    const result = cleanPackageJson(pkg);
 
-    expect(result.cleaned).toBe(true);
+    expect(result.cleaned).toBe(false);
 
     const cleaned = JSON.parse(result.content);
-    expect(cleaned.dependencies['@react-three/fiber']).toBe('^8.17.10');
-    expect(cleaned.dependencies.react).toBe('^18.3.1');
-    expect(cleaned.dependencies.next).toBe('14.2.28');
+    expect(cleaned.dependencies['@react-three/fiber']).toBe('^9.1.0');
+    expect(cleaned.dependencies.react).toBe('^19');
+    expect(cleaned.dependencies.next).toBe('15.5.12');
     expect(cleaned.dependencies.three).toBe('^0.170.0');
-    expect(result.removedDeps).toContain('@react-three/fiber capped to 8.x (React 18 compat)');
   });
 
-  it('should upgrade Next.js 14.0.x to 14.2.28 for SWC WASM', () => {
+  it('should leave Next.js 14.0.x untouched (local runtime supports all)', () => {
     const pkg = JSON.stringify({
       dependencies: {
         react: '^18.2.0',
@@ -232,19 +231,16 @@ describe('cleanPackageJsonForWebContainer', () => {
       },
     });
 
-    const result = cleanPackageJsonForWebContainer(pkg);
+    const result = cleanPackageJson(pkg);
 
-    expect(result.cleaned).toBe(true);
+    expect(result.cleaned).toBe(false);
 
     const cleaned = JSON.parse(result.content);
-    expect(cleaned.dependencies.next).toBe('14.2.28');
-
-    // React 18 should stay as-is (not downgraded further)
+    expect(cleaned.dependencies.next).toBe('14.0.0');
     expect(cleaned.dependencies.react).toBe('^18.2.0');
-    expect(result.removedDeps).toContain('next version capped to 14.x (WebContainer compat)');
   });
 
-  it('should upgrade Next.js 14.1.x to 14.2.28 for SWC WASM', () => {
+  it('should leave Next.js 14.1.x untouched (local runtime supports all)', () => {
     const pkg = JSON.stringify({
       dependencies: {
         react: '^18.2.0',
@@ -253,51 +249,40 @@ describe('cleanPackageJsonForWebContainer', () => {
       },
     });
 
-    const result = cleanPackageJsonForWebContainer(pkg);
-
-    expect(result.cleaned).toBe(true);
-
-    const cleaned = JSON.parse(result.content);
-    expect(cleaned.dependencies.next).toBe('14.2.28');
-    expect(cleaned.dependencies.react).toBe('^18.2.0');
-  });
-
-  it('should NOT upgrade Next.js 14.2.x (already has SWC WASM)', () => {
-    const pkg = JSON.stringify({
-      dependencies: {
-        react: '^18.2.0',
-        'react-dom': '^18.2.0',
-        next: '14.2.0',
-      },
-    });
-
-    const result = cleanPackageJsonForWebContainer(pkg);
+    const result = cleanPackageJson(pkg);
 
     expect(result.cleaned).toBe(false);
 
     const cleaned = JSON.parse(result.content);
-    expect(cleaned.dependencies.next).toBe('14.2.0');
+    expect(cleaned.dependencies.next).toBe('14.1.4');
+    expect(cleaned.dependencies.react).toBe('^18.2.0');
   });
 });
 
-describe('replaceUnsupportedFonts', () => {
-  it('should replace Geist and Geist_Mono in next/font/google imports', () => {
+describe('cleanPackageJsonForWebContainer (deprecated wrapper)', () => {
+  it('should delegate to cleanPackageJson', () => {
+    const pkg = JSON.stringify({
+      dependencies: {
+        react: '^19',
+        expo: 'latest',
+      },
+    });
+
+    const result = cleanPackageJsonForWebContainer(pkg);
+    expect(result.cleaned).toBe(true);
+    expect(result.removedDeps).toContain('expo (dependencies)');
+  });
+});
+
+describe('replaceUnsupportedFonts (deprecated — now a no-op)', () => {
+  it('should return content unchanged', () => {
     const layout = `import { Geist, Geist_Mono } from 'next/font/google';
-
-const geistSans = Geist({ subsets: ['latin'] });
-const geistMono = Geist_Mono({ subsets: ['latin'] });
-
-export default function RootLayout({ children }) {
-  return <html className={\`\${geistSans.variable} \${geistMono.variable}\`}><body>{children}</body></html>;
-}`;
+const geistSans = Geist({ subsets: ['latin'] });`;
 
     const result = replaceUnsupportedFonts(layout);
 
-    expect(result.replaced).toBe(true);
-    expect(result.content).toContain("import { Inter, Roboto_Mono } from 'next/font/google'");
-    expect(result.content).toContain('const geistSans = Inter(');
-    expect(result.content).toContain('const geistMono = Roboto_Mono(');
-    expect(result.content).not.toContain('Geist');
+    expect(result.replaced).toBe(false);
+    expect(result.content).toBe(layout);
   });
 
   it('should not modify files without next/font/google', () => {
@@ -308,16 +293,5 @@ export default function Home() { return <div>Hello</div>; }`;
 
     expect(result.replaced).toBe(false);
     expect(result.content).toBe(component);
-  });
-
-  it('should handle Geist only (no Geist_Mono)', () => {
-    const layout = `import { Geist } from "next/font/google";
-const font = Geist({ subsets: ['latin'] });`;
-
-    const result = replaceUnsupportedFonts(layout);
-
-    expect(result.replaced).toBe(true);
-    expect(result.content).toContain('import { Inter }');
-    expect(result.content).toContain('const font = Inter(');
   });
 });

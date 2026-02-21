@@ -2,11 +2,10 @@ import { json } from '@remix-run/node';
 import type { ActionFunctionArgs } from '@remix-run/node';
 import { withSecurity } from '~/lib/security';
 import { isAllowedUrl } from '~/utils/url';
-import { createScopedLogger } from '~/utils/logger';
+import { ApiError, handleApiError } from '~/lib/api/apiUtils';
 
 const MAX_CONTENT_LENGTH = 8000;
 const MAX_RESPONSE_SIZE = 5 * 1024 * 1024; // 5 MB cap on raw response body
-const logger = createScopedLogger('WebSearch');
 
 const FETCH_HEADERS = {
   'User-Agent':
@@ -56,66 +55,75 @@ async function webSearchAction({ request }: ActionFunctionArgs) {
     return json({ error: 'Method not allowed' }, { status: 405 });
   }
 
-  try {
-    const { url } = (await request.json()) as { url?: string };
+  return handleApiError(
+    'WebSearch',
+    async () => {
+      const { url } = (await request.json()) as { url?: string };
 
-    if (!url || typeof url !== 'string') {
-      return json({ error: 'URL is required' }, { status: 400 });
-    }
+      if (!url || typeof url !== 'string') {
+        return json({ error: 'URL is required' }, { status: 400 });
+      }
 
-    if (!isAllowedUrl(url)) {
-      return json({ error: 'URL is not allowed. Only public HTTP/HTTPS URLs are accepted.' }, { status: 400 });
-    }
+      if (!isAllowedUrl(url)) {
+        return json({ error: 'URL is not allowed. Only public HTTP/HTTPS URLs are accepted.' }, { status: 400 });
+      }
 
-    const response = await fetch(url, {
-      headers: FETCH_HEADERS,
-      signal: AbortSignal.timeout(10_000),
-    });
+      let response: Response;
 
-    if (!response.ok) {
-      return json({ error: `Failed to fetch URL: ${response.status} ${response.statusText}` }, { status: 502 });
-    }
+      try {
+        response = await fetch(url, {
+          headers: FETCH_HEADERS,
+          signal: AbortSignal.timeout(10_000),
+        });
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'TimeoutError') {
+          throw new ApiError('Request timed out after 10 seconds', 504);
+        }
 
-    const contentType = response.headers.get('content-type') || '';
+        throw error;
+      }
 
-    if (!contentType.includes('text/html') && !contentType.includes('text/plain')) {
-      return json({ error: 'URL must point to an HTML or text page' }, { status: 400 });
-    }
+      if (!response.ok) {
+        return json({ error: `Failed to fetch URL: ${response.status} ${response.statusText}` }, { status: 502 });
+      }
 
-    const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
+      const contentType = response.headers.get('content-type') || '';
 
-    if (contentLength > MAX_RESPONSE_SIZE) {
-      return json({ error: `Response too large (${contentLength} bytes). Maximum is ${MAX_RESPONSE_SIZE}.` }, { status: 413 });
-    }
+      if (!contentType.includes('text/html') && !contentType.includes('text/plain')) {
+        return json({ error: 'URL must point to an HTML or text page' }, { status: 400 });
+      }
 
-    const html = await response.text();
+      const contentLength = parseInt(response.headers.get('content-length') || '0', 10);
 
-    if (html.length > MAX_RESPONSE_SIZE) {
-      return json({ error: 'Response body exceeds maximum allowed size.' }, { status: 413 });
-    }
+      if (contentLength > MAX_RESPONSE_SIZE) {
+        return json(
+          { error: `Response too large (${contentLength} bytes). Maximum is ${MAX_RESPONSE_SIZE}.` },
+          { status: 413 },
+        );
+      }
 
-    const title = extractTitle(html);
-    const description = extractMetaDescription(html);
-    const content = extractTextContent(html);
+      const html = await response.text();
 
-    return json({
-      success: true,
-      data: {
-        title,
-        description,
-        content: content.length > MAX_CONTENT_LENGTH ? content.slice(0, MAX_CONTENT_LENGTH) + '...' : content,
-        sourceUrl: url,
-      },
-    });
-  } catch (error) {
-    if (error instanceof DOMException && error.name === 'TimeoutError') {
-      return json({ error: 'Request timed out after 10 seconds' }, { status: 504 });
-    }
+      if (html.length > MAX_RESPONSE_SIZE) {
+        return json({ error: 'Response body exceeds maximum allowed size.' }, { status: 413 });
+      }
 
-    logger.error('Web search error:', error);
+      const title = extractTitle(html);
+      const description = extractMetaDescription(html);
+      const content = extractTextContent(html);
 
-    return json({ error: error instanceof Error ? error.message : 'Failed to fetch URL' }, { status: 500 });
-  }
+      return json({
+        success: true,
+        data: {
+          title,
+          description,
+          content: content.length > MAX_CONTENT_LENGTH ? content.slice(0, MAX_CONTENT_LENGTH) + '...' : content,
+          sourceUrl: url,
+        },
+      });
+    },
+    'Failed to fetch URL',
+  );
 }
 
 export const action = withSecurity(webSearchAction);

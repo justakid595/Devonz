@@ -1,9 +1,8 @@
-import type { PathWatcherEvent, WebContainer } from '@webcontainer/api';
+import type { RuntimeProvider, WatchEvent } from '~/lib/runtime/runtime-provider';
 import { getEncoding } from 'istextorbinary';
 import { map, type MapStore } from 'nanostores';
 import { Buffer } from 'node:buffer';
 import { path } from '~/utils/path';
-import { bufferWatchEvents } from '~/utils/buffer';
 import { WORK_DIR } from '~/utils/constants';
 import { computeFileModifications } from '~/utils/diff';
 import { createScopedLogger } from '~/utils/logger';
@@ -44,7 +43,7 @@ type Dirent = File | Folder;
 export type FileMap = Record<string, Dirent | undefined>;
 
 export class FilesStore {
-  #webcontainer: Promise<WebContainer>;
+  #runtime: Promise<RuntimeProvider>;
 
   /**
    * Tracks the number of files without folders.
@@ -64,7 +63,7 @@ export class FilesStore {
   #deletedPaths: Set<string> = import.meta.hot?.data.deletedPaths ?? new Set();
 
   /**
-   * Map of files that matches the state of WebContainer.
+   * Map of files that matches the state of the runtime filesystem.
    */
   files: MapStore<FileMap> = import.meta.hot?.data.files ?? map({});
 
@@ -72,8 +71,8 @@ export class FilesStore {
     return this.#size;
   }
 
-  constructor(webcontainerPromise: Promise<WebContainer>) {
-    this.#webcontainer = webcontainerPromise;
+  constructor(runtimePromise: Promise<RuntimeProvider>) {
+    this.#runtime = runtimePromise;
 
     // Load deleted paths from localStorage if available
     try {
@@ -565,10 +564,10 @@ export class FilesStore {
   }
 
   async saveFile(filePath: string, content: string) {
-    const webcontainer = await this.#webcontainer;
+    const runtime = await this.#runtime;
 
     try {
-      const relativePath = path.relative(webcontainer.workdir, filePath);
+      const relativePath = path.relative(runtime.workdir, filePath);
 
       if (!relativePath) {
         throw new Error(`EINVAL: invalid file path, write '${relativePath}'`);
@@ -580,7 +579,7 @@ export class FilesStore {
         unreachable('Expected content to be defined');
       }
 
-      await webcontainer.fs.writeFile(relativePath, content);
+      await runtime.fs.writeFile(relativePath, content);
 
       if (!this.#modifiedFiles.has(filePath)) {
         this.#modifiedFiles.set(filePath, oldContent);
@@ -607,11 +606,11 @@ export class FilesStore {
   }
 
   async #init() {
-    const webcontainer = await this.#webcontainer;
+    const runtime = await this.#runtime;
 
-    // Guard against undefined webcontainer (SSR or failed boot)
-    if (!webcontainer || !webcontainer.internal) {
-      logger.warn('WebContainer not available, skipping init');
+    /* Guard against undefined runtime (SSR or failed boot) */
+    if (!runtime) {
+      logger.warn('Runtime not available, skipping init');
 
       return;
     }
@@ -619,15 +618,8 @@ export class FilesStore {
     // Clean up any files that were previously deleted
     this.#cleanupDeletedFiles();
 
-    // Set up file watcher
-    webcontainer.internal.watchPaths(
-      {
-        include: [`${WORK_DIR}/**`],
-        exclude: ['**/node_modules', '.git', '**/package-lock.json'],
-        includeContent: true,
-      },
-      bufferWatchEvents(100, this.#processEventBuffer.bind(this)),
-    );
+    /* Set up file watcher — the runtime watch already buffers events (100 ms). */
+    runtime.fs.watch(`${WORK_DIR}/**`, (events) => void this.#processWatchEvents(events));
 
     // Get the current chat ID
     const currentChatId = getCurrentChatId();
@@ -710,20 +702,17 @@ export class FilesStore {
     }
   }
 
-  #processEventBuffer(events: Array<[events: PathWatcherEvent[]]>) {
-    const watchEvents = events.flat(2);
+  async #processWatchEvents(events: WatchEvent[]) {
+    for (const event of events) {
+      /* Remove any trailing slashes */
+      const sanitizedPath = event.path.replace(/\/+$/g, '');
 
-    for (const { type, path, buffer } of watchEvents) {
-      // remove any trailing slashes
-      const sanitizedPath = path.replace(/\/+$/g, '');
-
-      switch (type) {
-        case 'add_dir': {
-          // we intentionally add a trailing slash so we can distinguish files from folders in the file tree
+      switch (event.type) {
+        case 'addDir': {
           this.files.setKey(sanitizedPath, { type: 'folder' });
           break;
         }
-        case 'remove_dir': {
+        case 'unlinkDir': {
           this.files.setKey(sanitizedPath, undefined);
 
           for (const [direntPath] of Object.entries(this.files)) {
@@ -734,40 +723,47 @@ export class FilesStore {
 
           break;
         }
-        case 'add_file':
+        case 'add':
         case 'change': {
-          if (type === 'add_file') {
+          if (event.type === 'add') {
             this.#size++;
           }
 
-          let content = '';
-
-          /**
-           * @note This check is purely for the editor. The way we detect this is not
-           * bullet-proof and it's a best guess so there might be false-positives.
-           * The reason we do this is because we don't want to display binary files
-           * in the editor nor allow to edit them.
-           */
-          const isBinary = isBinaryFile(buffer);
-
-          if (!isBinary) {
-            content = this.#decodeFileContent(buffer);
-          }
-
-          this.files.setKey(sanitizedPath, { type: 'file', content, isBinary });
+          await this.#readAndSetFile(sanitizedPath);
 
           break;
         }
-        case 'remove_file': {
+        case 'unlink': {
           this.#size--;
           this.files.setKey(sanitizedPath, undefined);
           break;
         }
-        case 'update_directory': {
-          // we don't care about these events
-          break;
-        }
       }
+    }
+  }
+
+  /**
+   * Read a file from the runtime filesystem and update the in-memory store.
+   * Used by the watch handler when file content is not provided inline.
+   */
+  async #readAndSetFile(filePath: string) {
+    try {
+      const runtime = await this.#runtime;
+      const relativePath = path.relative(runtime.workdir, filePath);
+      const buffer = await runtime.fs.readFileRaw(relativePath);
+
+      /**
+       * @note This check is purely for the editor. The way we detect this is not
+       * bullet-proof and it's a best guess so there might be false-positives.
+       * The reason we do this is because we don't want to display binary files
+       * in the editor nor allow to edit them.
+       */
+      const isBinary = isBinaryFile(buffer);
+      const content = isBinary ? '' : this.#decodeFileContent(buffer);
+
+      this.files.setKey(filePath, { type: 'file', content, isBinary });
+    } catch (error) {
+      logger.warn(`Failed to read file during watch: ${filePath}`, error);
     }
   }
 
@@ -785,10 +781,10 @@ export class FilesStore {
   }
 
   async createFile(filePath: string, content: string | Uint8Array = '') {
-    const webcontainer = await this.#webcontainer;
+    const runtime = await this.#runtime;
 
     try {
-      const relativePath = path.relative(webcontainer.workdir, filePath);
+      const relativePath = path.relative(runtime.workdir, filePath);
 
       if (!relativePath) {
         throw new Error(`EINVAL: invalid file path, create '${relativePath}'`);
@@ -797,13 +793,13 @@ export class FilesStore {
       const dirPath = path.dirname(relativePath);
 
       if (dirPath !== '.') {
-        await webcontainer.fs.mkdir(dirPath, { recursive: true });
+        await runtime.fs.mkdir(dirPath, { recursive: true });
       }
 
       const isBinary = content instanceof Uint8Array;
 
       if (isBinary) {
-        await webcontainer.fs.writeFile(relativePath, Buffer.from(content));
+        await runtime.fs.writeFile(relativePath, content);
 
         const base64Content = Buffer.from(content).toString('base64');
         this.files.setKey(filePath, {
@@ -816,7 +812,7 @@ export class FilesStore {
         this.#modifiedFiles.set(filePath, base64Content);
       } else {
         const contentToWrite = (content as string).length === 0 ? ' ' : content;
-        await webcontainer.fs.writeFile(relativePath, contentToWrite);
+        await runtime.fs.writeFile(relativePath, contentToWrite);
 
         this.files.setKey(filePath, {
           type: 'file',
@@ -838,16 +834,16 @@ export class FilesStore {
   }
 
   async createFolder(folderPath: string) {
-    const webcontainer = await this.#webcontainer;
+    const runtime = await this.#runtime;
 
     try {
-      const relativePath = path.relative(webcontainer.workdir, folderPath);
+      const relativePath = path.relative(runtime.workdir, folderPath);
 
       if (!relativePath) {
         throw new Error(`EINVAL: invalid folder path, create '${relativePath}'`);
       }
 
-      await webcontainer.fs.mkdir(relativePath, { recursive: true });
+      await runtime.fs.mkdir(relativePath, { recursive: true });
 
       this.files.setKey(folderPath, { type: 'folder' });
 
@@ -861,16 +857,16 @@ export class FilesStore {
   }
 
   async deleteFile(filePath: string) {
-    const webcontainer = await this.#webcontainer;
+    const runtime = await this.#runtime;
 
     try {
-      const relativePath = path.relative(webcontainer.workdir, filePath);
+      const relativePath = path.relative(runtime.workdir, filePath);
 
       if (!relativePath) {
         throw new Error(`EINVAL: invalid file path, delete '${relativePath}'`);
       }
 
-      await webcontainer.fs.rm(relativePath);
+      await runtime.fs.rm(relativePath);
 
       this.#deletedPaths.add(filePath);
 
@@ -893,16 +889,16 @@ export class FilesStore {
   }
 
   async deleteFolder(folderPath: string) {
-    const webcontainer = await this.#webcontainer;
+    const runtime = await this.#runtime;
 
     try {
-      const relativePath = path.relative(webcontainer.workdir, folderPath);
+      const relativePath = path.relative(runtime.workdir, folderPath);
 
       if (!relativePath) {
         throw new Error(`EINVAL: invalid folder path, delete '${relativePath}'`);
       }
 
-      await webcontainer.fs.rm(relativePath, { recursive: true });
+      await runtime.fs.rm(relativePath, { recursive: true });
 
       this.#deletedPaths.add(folderPath);
 

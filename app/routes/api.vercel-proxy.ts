@@ -15,12 +15,9 @@
  * 3. Return the response to the client
  */
 
-import { json, type ActionFunctionArgs, type AppLoadContext, type LoaderFunctionArgs } from '@remix-run/node';
-import { getApiKeysFromCookie } from '~/lib/api/cookies';
+import { json, type ActionFunctionArgs, type LoaderFunctionArgs } from '@remix-run/node';
+import { externalFetch, handleApiError, resolveToken, unauthorizedResponse } from '~/lib/api/apiUtils';
 import { withSecurity } from '~/lib/security';
-import { createScopedLogger } from '~/utils/logger';
-
-const logger = createScopedLogger('VercelProxy');
 
 const VERCEL_API_BASE = 'https://api.vercel.com';
 
@@ -39,50 +36,19 @@ interface ProxyRequest {
 }
 
 /**
- * Get Vercel token from request
- */
-function getVercelToken(request: Request, context: AppLoadContext): string | null {
-  // Try cookies first
-  const cookieHeader = request.headers.get('Cookie');
-  const apiKeys = getApiKeysFromCookie(cookieHeader);
-
-  if (apiKeys.VITE_VERCEL_ACCESS_TOKEN) {
-    return apiKeys.VITE_VERCEL_ACCESS_TOKEN;
-  }
-
-  // Try environment
-  const envToken = context?.cloudflare?.env?.VITE_VERCEL_ACCESS_TOKEN || process.env.VITE_VERCEL_ACCESS_TOKEN;
-
-  if (envToken) {
-    return envToken;
-  }
-
-  // Try Authorization header
-  const authHeader = request.headers.get('Authorization');
-
-  if (authHeader?.startsWith('Bearer ')) {
-    return authHeader.substring(7);
-  }
-
-  return null;
-}
-
-/**
  * Handle GET requests - simple user info endpoint
  */
 async function vercelProxyLoader({ request, context }: LoaderFunctionArgs) {
-  const vercelToken = getVercelToken(request, context);
+  const vercelToken = resolveToken(request, context, 'VITE_VERCEL_ACCESS_TOKEN');
 
   if (!vercelToken) {
-    return json({ error: 'Vercel token not found' }, { status: 401 });
+    return unauthorizedResponse('Vercel');
   }
 
-  try {
-    const response = await fetch(`${VERCEL_API_BASE}/v2/user`, {
-      headers: {
-        Authorization: `Bearer ${vercelToken}`,
-        'User-Agent': 'devonz-app',
-      },
+  return handleApiError('VercelProxy.loader', async () => {
+    const response = await externalFetch({
+      url: `${VERCEL_API_BASE}/v2/user`,
+      token: vercelToken,
     });
 
     if (!response.ok) {
@@ -100,30 +66,20 @@ async function vercelProxyLoader({ request, context }: LoaderFunctionArgs) {
     const data = await response.json();
 
     return json(data);
-  } catch (error) {
-    logger.error('Vercel proxy error:', error);
-
-    return json(
-      {
-        error: 'Failed to proxy Vercel request',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
-    );
-  }
+  });
 }
 
 /**
  * Handle POST requests - flexible proxy for any Vercel API endpoint
  */
 async function vercelProxyAction({ request, context }: ActionFunctionArgs) {
-  const vercelToken = getVercelToken(request, context);
+  const vercelToken = resolveToken(request, context, 'VITE_VERCEL_ACCESS_TOKEN');
 
   if (!vercelToken) {
-    return json({ error: 'Vercel token not found' }, { status: 401 });
+    return unauthorizedResponse('Vercel');
   }
 
-  try {
+  return handleApiError('VercelProxy.action', async () => {
     const proxyRequest: ProxyRequest = await request.json();
     const { endpoint, method = 'GET', body, params } = proxyRequest;
 
@@ -131,7 +87,6 @@ async function vercelProxyAction({ request, context }: ActionFunctionArgs) {
       return json({ error: 'Missing endpoint in request body' }, { status: 400 });
     }
 
-    // Build URL with query params
     let url = `${VERCEL_API_BASE}${endpoint.startsWith('/') ? endpoint : '/' + endpoint}`;
 
     if (params && Object.keys(params).length > 0) {
@@ -139,7 +94,6 @@ async function vercelProxyAction({ request, context }: ActionFunctionArgs) {
       url += `?${searchParams.toString()}`;
     }
 
-    // Build fetch options
     const fetchOptions: RequestInit = {
       method,
       headers: {
@@ -149,14 +103,12 @@ async function vercelProxyAction({ request, context }: ActionFunctionArgs) {
       },
     };
 
-    // Add body for non-GET requests
     if (body && method !== 'GET') {
       fetchOptions.body = JSON.stringify(body);
     }
 
     const response = await fetch(url, fetchOptions);
 
-    // Handle response
     const contentType = response.headers.get('content-type');
     let responseData: unknown;
 
@@ -177,17 +129,7 @@ async function vercelProxyAction({ request, context }: ActionFunctionArgs) {
     }
 
     return json(responseData);
-  } catch (error) {
-    logger.error('Vercel proxy error:', error);
-
-    return json(
-      {
-        error: 'Failed to proxy Vercel request',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
-    );
-  }
+  });
 }
 
 export const loader = withSecurity(vercelProxyLoader, {

@@ -1,4 +1,4 @@
-import type { WebContainer, WebContainerProcess } from '@webcontainer/api';
+import type { RuntimeProvider, SpawnedProcess, Disposer } from '~/lib/runtime/runtime-provider';
 import type { ITerminal } from '~/types/terminal';
 import { withResolvers } from './promises';
 import { atom } from 'nanostores';
@@ -8,109 +8,149 @@ import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('Shell');
 
-export async function newShellProcess(webcontainer: WebContainer, terminal: ITerminal) {
-  const args: string[] = [];
+/**
+ * Unique marker prefix used to detect command completion in terminal output.
+ * The full marker format is `__DEVONZ_CMD_DONE__<id>_<exitCode>`.
+ */
+const MARKER_PREFIX = '__DEVONZ_CMD_DONE__';
 
-  // we spawn a JSH process with a fallback cols and rows in case the process is not attached yet to a visible terminal
-  const process = await webcontainer.spawn('/bin/jsh', ['--osc', ...args], {
+/** Regex that matches the marker in terminal output. */
+const MARKER_REGEX = new RegExp(`${MARKER_PREFIX}_(\\w+)_(\\d+)`);
+
+/**
+ * Detect the user's default shell command and args.
+ * Falls back to bash on Linux/Mac and cmd on Windows.
+ */
+function getDefaultShell(): { command: string; args: string[] } {
+  const isWindows = typeof process !== 'undefined' && process.platform === 'win32';
+
+  if (isWindows) {
+    return { command: 'powershell.exe', args: ['-NoLogo', '-NoExit'] };
+  }
+
+  const userShell = typeof process !== 'undefined' ? process.env.SHELL : undefined;
+
+  if (userShell) {
+    return { command: userShell, args: ['--login', '-i'] };
+  }
+
+  return { command: '/bin/bash', args: ['--login', '-i'] };
+}
+
+/**
+ * Spawn a new interactive shell process attached to a terminal.
+ * This creates a simple, user-facing terminal tab (not the AI-command executor).
+ */
+export async function newShellProcess(runtime: RuntimeProvider, terminal: ITerminal): Promise<SpawnedProcess> {
+  const { command, args } = getDefaultShell();
+
+  const shellProcess = await runtime.spawn(command, args, {
     terminal: {
       cols: terminal.cols ?? 80,
       rows: terminal.rows ?? 15,
     },
   });
 
-  const input = process.input.getWriter();
-  const output = process.output;
+  /* Forward process output → terminal */
+  shellProcess.onData((data) => {
+    terminal.write(data);
 
-  const jshReady = withResolvers<void>();
+    /* Detect actionable errors in terminal output */
+    try {
+      detectTerminalErrors(data);
+    } catch {
+      /* Ignore errors in error detection */
+    }
 
-  let isInteractive = false;
-  output.pipeTo(
-    new WritableStream({
-      write(data) {
-        if (!isInteractive) {
-          const [, osc] = data.match(/\x1b\]654;([^\x07]+)\x07/) || [];
+    /* Capture terminal output for debugging */
+    try {
+      import('~/utils/debugLogger')
+        .then(({ captureTerminalLog }) => {
+          const cleanData = data.replace(/\x1b\[[0-9;]*[mG]/g, '').trim();
 
-          if (osc === 'interactive') {
-            // wait until we see the interactive OSC
-            isInteractive = true;
-
-            jshReady.resolve();
+          if (cleanData) {
+            captureTerminalLog(cleanData, 'output');
           }
-        }
-
-        terminal.write(data);
-
-        // Detect actionable errors in terminal output
-        try {
-          detectTerminalErrors(data);
-        } catch {
-          // Ignore errors in error detection
-        }
-
-        // Capture terminal output for debugging
-        try {
-          import('~/utils/debugLogger')
-            .then(({ captureTerminalLog }) => {
-              // Clean the data by removing ANSI escape sequences for logging
-              const cleanData = data.replace(/\x1b\[[0-9;]*[mG]/g, '').trim();
-
-              if (cleanData) {
-                captureTerminalLog(cleanData, 'output');
-              }
-            })
-            .catch(() => {
-              // Ignore if debug logger is not available
-            });
-        } catch {
-          // Ignore errors in debug logging
-        }
-      },
-    }),
-  );
-
-  terminal.onData((data) => {
-    if (isInteractive) {
-      input.write(data);
-
-      // Capture terminal input for debugging
-      try {
-        import('~/utils/debugLogger')
-          .then(({ captureTerminalLog }) => {
-            // Clean the data and check if it's a command (not just cursor movement)
-            const cleanData = data.replace(/\x1b\[[0-9;]*[A-Z]/g, '').trim();
-
-            if (cleanData && cleanData !== '\r' && cleanData !== '\n') {
-              captureTerminalLog(cleanData, 'input');
-            }
-          })
-          .catch(() => {
-            // Ignore if debug logger is not available
-          });
-      } catch {
-        // Ignore errors in debug logging
-      }
+        })
+        .catch(() => {
+          /* Ignore if debug logger is not available */
+        });
+    } catch {
+      /* Ignore errors in debug logging */
     }
   });
 
-  await jshReady.promise;
+  /* Forward terminal input → process stdin */
+  terminal.onData((data) => {
+    shellProcess.write(data);
 
-  return process;
+    /* Capture terminal input for debugging */
+    try {
+      import('~/utils/debugLogger')
+        .then(({ captureTerminalLog }) => {
+          const cleanData = data.replace(/\x1b\[[0-9;]*[A-Z]/g, '').trim();
+
+          if (cleanData && cleanData !== '\r' && cleanData !== '\n') {
+            captureTerminalLog(cleanData, 'input');
+          }
+        })
+        .catch(() => {
+          /* Ignore if debug logger is not available */
+        });
+    } catch {
+      /* Ignore errors in debug logging */
+    }
+  });
+
+  return shellProcess;
 }
 
 export type ExecutionResult = { output: string; exitCode: number } | undefined;
 
+/**
+ * AI-command executor shell.
+ *
+ * Maintains a persistent shell session where commands are sent one-at-a-time,
+ * and command completion + exit codes are detected via echo markers.
+ *
+ * Replaces the previous WebContainer jsh+OSC-based approach with a marker pattern
+ * that works with any real shell (bash, zsh, powershell, cmd).
+ */
 export class DevonzShell {
   #initialized: (() => void) | undefined;
   #readyPromise: Promise<void>;
-  #webcontainer: WebContainer | undefined;
+  #runtime: RuntimeProvider | undefined;
   #terminal: ITerminal | undefined;
-  #process: WebContainerProcess | undefined;
+  #process: SpawnedProcess | undefined;
+  #disposeOutput: Disposer | undefined;
+
   executionState = atom<
-    { sessionId: string; active: boolean; executionPrms?: Promise<any>; abort?: () => void } | undefined
+    { sessionId: string; active: boolean; executionPrms?: Promise<unknown>; abort?: () => void } | undefined
   >();
-  #outputStream: ReadableStreamDefaultReader<string> | undefined;
-  #shellInputStream: WritableStreamDefaultWriter<string> | undefined;
+
+  /**
+   * Buffer for accumulating output when waiting for marker detection.
+   * Only populated during active command execution.
+   */
+  #outputBuffer = '';
+
+  /** Resolver for the currently awaited command marker. */
+  #markerResolver: ((result: { output: string; exitCode: number }) => void) | undefined;
+
+  /** The marker ID we are currently waiting for. */
+  #pendingMarkerId: string | undefined;
+
+  /** Resolver for shell readiness detection. */
+  #readyResolver: (() => void) | undefined;
+
+  /** Buffer for accumulating output during readiness detection. */
+  #readyBuffer = '';
+
+  /** The readiness marker string to look for. */
+  #readyMarker = '';
+
+  /** Regex for detecting Expo URLs in terminal output. */
+  readonly #expoUrlRegex = /(exp:\/\/[^\s]+)/;
 
   constructor() {
     this.#readyPromise = new Promise((resolve) => {
@@ -122,114 +162,117 @@ export class DevonzShell {
     return this.#readyPromise;
   }
 
-  async init(webcontainer: WebContainer, terminal: ITerminal) {
-    this.#webcontainer = webcontainer;
+  /**
+   * Initialize the shell with a runtime provider and terminal.
+   * Spawns a real OS shell and waits for it to become interactive.
+   */
+  async init(runtime: RuntimeProvider, terminal: ITerminal) {
+    this.#runtime = runtime;
     this.#terminal = terminal;
 
-    // Use all three streams from tee: one for terminal, one for command execution, one for Expo URL detection
-    const { process, commandStream, expoUrlStream } = await this.newDevonzShellProcess(webcontainer, terminal);
-    this.#process = process;
-    this.#outputStream = commandStream.getReader();
+    const { command, args } = getDefaultShell();
 
-    // Start background Expo URL watcher immediately
-    this._watchExpoUrlInBackground(expoUrlStream);
-
-    await this.waitTillOscCode('interactive');
-    this.#initialized?.();
-  }
-
-  async newDevonzShellProcess(webcontainer: WebContainer, terminal: ITerminal) {
-    const args: string[] = [];
-    const process = await webcontainer.spawn('/bin/jsh', ['--osc', ...args], {
+    this.#process = await runtime.spawn(command, args, {
       terminal: {
         cols: terminal.cols ?? 80,
         rows: terminal.rows ?? 15,
       },
     });
 
-    const input = process.input.getWriter();
-    this.#shellInputStream = input;
-
-    // Tee the output so we can have three independent readers
-    const [streamA, streamB] = process.output.tee();
-    const [streamC, streamD] = streamB.tee();
-
-    const jshReady = withResolvers<void>();
-    let isInteractive = false;
-    streamA.pipeTo(
-      new WritableStream({
-        write(data) {
-          if (!isInteractive) {
-            const [, osc] = data.match(/\x1b\]654;([^\x07]+)\x07/) || [];
-
-            if (osc === 'interactive') {
-              isInteractive = true;
-              jshReady.resolve();
-            }
-          }
-
-          terminal.write(data);
-
-          // Detect actionable errors in terminal output
-          try {
-            detectTerminalErrors(data);
-          } catch {
-            // Ignore errors in error detection
-          }
-        },
-      }),
-    );
-
-    terminal.onData((data) => {
-      if (isInteractive) {
-        input.write(data);
-      }
+    /* Forward output to terminal + internal handler */
+    this.#disposeOutput = this.#process.onData((data) => {
+      terminal.write(data);
+      this.#handleOutputData(data);
     });
 
-    await jshReady.promise;
+    /* Forward terminal input → process stdin */
+    terminal.onData((data) => {
+      this.#process?.write(data);
+    });
 
-    // Return all streams for use in init
-    return { process, terminalStream: streamA, commandStream: streamC, expoUrlStream: streamD };
+    /*
+     * Wait for the shell to become interactive by sending a readiness marker.
+     * The shell will echo the marker once it has finished its login scripts.
+     */
+    const readyPromise = withResolvers<void>();
+    this.#readyMarker = `${MARKER_PREFIX}_READY`;
+    this.#readyBuffer = '';
+    this.#readyResolver = () => readyPromise.resolve();
+
+    this.#process.write(`echo "${this.#readyMarker}"\n`);
+
+    await readyPromise.promise;
+
+    /* Clear readiness detection state */
+    this.#readyResolver = undefined;
+    this.#readyMarker = '';
+    this.#readyBuffer = '';
+
+    this.#initialized?.();
   }
 
-  // Dedicated background watcher for Expo URL
-  private async _watchExpoUrlInBackground(stream: ReadableStream<string>) {
-    const reader = stream.getReader();
-    let buffer = '';
-    const expoUrlRegex = /(exp:\/\/[^\s]+)/;
+  /**
+   * Internal handler for all output data from the shell process.
+   * Scans for command-completion markers, Expo URLs, and terminal errors.
+   */
+  #handleOutputData(data: string) {
+    /* Detect actionable errors */
+    try {
+      detectTerminalErrors(data);
+    } catch {
+      /* Ignore */
+    }
 
-    while (true) {
-      const { value, done } = await reader.read();
+    /* Shell readiness detection (during init) */
+    if (this.#readyResolver && this.#readyMarker) {
+      this.#readyBuffer += data;
 
-      if (done) {
-        break;
+      if (this.#readyBuffer.includes(this.#readyMarker)) {
+        this.#readyResolver();
       }
+    }
 
-      buffer += value || '';
+    /* Expo URL detection */
+    const expoMatch = data.match(this.#expoUrlRegex);
 
-      const expoUrlMatch = buffer.match(expoUrlRegex);
+    if (expoMatch) {
+      const cleanUrl = expoMatch[1]
+        .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '')
+        .replace(/[^\x20-\x7E]+$/g, '');
+      expoUrlAtom.set(cleanUrl);
+    }
 
-      if (expoUrlMatch) {
-        const cleanUrl = expoUrlMatch[1]
-          .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '')
-          .replace(/[^\x20-\x7E]+$/g, '');
-        expoUrlAtom.set(cleanUrl);
-        buffer = buffer.slice(buffer.indexOf(expoUrlMatch[1]) + expoUrlMatch[1].length);
-      }
+    /* If we're waiting for a command marker, accumulate output */
+    if (this.#pendingMarkerId) {
+      this.#outputBuffer += data;
 
-      if (buffer.length > 2048) {
-        buffer = buffer.slice(-2048);
+      const markerMatch = this.#outputBuffer.match(MARKER_REGEX);
+
+      if (markerMatch && markerMatch[1] === this.#pendingMarkerId) {
+        const exitCode = parseInt(markerMatch[2], 10);
+
+        /*
+         * Extract the output between command echo and marker.
+         * Strip the marker line itself from the captured output.
+         */
+        const markerIndex = this.#outputBuffer.indexOf(`${MARKER_PREFIX}_${this.#pendingMarkerId}`);
+        const commandOutput = this.#outputBuffer.slice(0, markerIndex);
+
+        this.#markerResolver?.({ output: commandOutput, exitCode });
+        this.#markerResolver = undefined;
+        this.#pendingMarkerId = undefined;
+        this.#outputBuffer = '';
       }
     }
   }
 
   /**
-   * Interrupt any running process in the terminal by sending Ctrl+C
-   * Useful when user wants to fix an error and terminal needs to be free for new commands
+   * Interrupt any running process in the terminal by sending Ctrl+C.
+   * Useful when user wants to fix an error and terminal needs to be free.
    */
   interruptExecution(): void {
-    if (this.#terminal) {
-      this.#terminal.input('\x03');
+    if (this.#process) {
+      this.#process.write('\x03');
     }
   }
 
@@ -241,8 +284,12 @@ export class DevonzShell {
     return this.#process;
   }
 
+  /**
+   * Execute a command in the shell and wait for it to complete.
+   * Uses echo markers to detect command completion and capture exit code.
+   */
   async executeCommand(sessionId: string, command: string, abort?: () => void): Promise<ExecutionResult> {
-    if (!this.process || !this.terminal) {
+    if (!this.#process || !this.#terminal) {
       return undefined;
     }
 
@@ -252,23 +299,35 @@ export class DevonzShell {
       state.abort();
     }
 
-    /*
-     * interrupt the current execution
-     *  this.#shellInputStream?.write('\x03');
-     */
-    this.terminal.input('\x03');
-    await this.waitTillOscCode('prompt');
+    /* Interrupt the current execution with Ctrl+C */
+    this.#process.write('\x03');
+
+    /* Wait briefly for prompt to settle */
+    await new Promise((resolve) => setTimeout(resolve, 100));
 
     if (state && state.executionPrms) {
       await state.executionPrms;
     }
 
-    //start a new execution
-    this.terminal.input(command.trim() + '\n');
+    /* Generate unique marker ID for this command */
+    const markerId = Date.now().toString(36);
 
-    //wait for the execution to finish
-    const executionPromise = this.getCurrentExecutionResult();
+    /* Prepare the execution promise */
+    const executionPromise = new Promise<{ output: string; exitCode: number }>((resolve) => {
+      this.#markerResolver = resolve;
+      this.#pendingMarkerId = markerId;
+      this.#outputBuffer = '';
+    });
+
     this.executionState.set({ sessionId, active: true, executionPrms: executionPromise, abort });
+
+    /*
+     * Send the command followed by a marker echo.
+     * The marker includes the exit code of the preceding command ($?).
+     * Use a semicolon-based chain that works in both bash and powershell.
+     */
+    const markerCommand = `${command.trim()}; echo "${MARKER_PREFIX}_${markerId}_$?"`;
+    this.#process.write(markerCommand + '\n');
 
     const resp = await executionPromise;
     this.executionState.set({ sessionId, active: false });
@@ -283,128 +342,62 @@ export class DevonzShell {
 
     return resp;
   }
-
-  async getCurrentExecutionResult(): Promise<ExecutionResult> {
-    const { output, exitCode } = await this.waitTillOscCode('exit');
-    return { output, exitCode };
-  }
-
-  onQRCodeDetected?: (qrCode: string) => void;
-
-  async waitTillOscCode(waitCode: string) {
-    let fullOutput = '';
-    let exitCode: number = 0;
-    let buffer = ''; // <-- Add a buffer to accumulate output
-
-    if (!this.#outputStream) {
-      return { output: fullOutput, exitCode };
-    }
-
-    const tappedStream = this.#outputStream;
-
-    // Regex for Expo URL
-    const expoUrlRegex = /(exp:\/\/[^\s]+)/;
-
-    while (true) {
-      const { value, done } = await tappedStream.read();
-
-      if (done) {
-        break;
-      }
-
-      const text = value || '';
-      fullOutput += text;
-      buffer += text; // <-- Accumulate in buffer
-
-      // Extract Expo URL from buffer and set store
-      const expoUrlMatch = buffer.match(expoUrlRegex);
-
-      if (expoUrlMatch) {
-        // Remove any trailing ANSI escape codes or non-printable characters
-        const cleanUrl = expoUrlMatch[1]
-          .replace(/[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g, '')
-          .replace(/[^\x20-\x7E]+$/g, '');
-        expoUrlAtom.set(cleanUrl);
-
-        // Remove everything up to and including the URL from the buffer to avoid duplicate matches
-        buffer = buffer.slice(buffer.indexOf(expoUrlMatch[1]) + expoUrlMatch[1].length);
-      }
-
-      // Check if command completion signal with exit code
-      const [, osc, , , code] = text.match(/\x1b\]654;([^\x07=]+)=?((-?\d+):(\d+))?\x07/) || [];
-
-      if (osc === 'exit') {
-        exitCode = parseInt(code, 10);
-      }
-
-      if (osc === waitCode) {
-        break;
-      }
-    }
-
-    return { output: fullOutput, exitCode };
-  }
 }
 
 /**
- * Cleans and formats terminal output while preserving structure and paths
- * Handles ANSI, OSC, and various terminal control sequences
+ * Cleans and formats terminal output while preserving structure and paths.
+ * Handles ANSI, OSC, and various terminal control sequences.
  */
 export function cleanTerminalOutput(input: string): string {
-  // Step 1: Remove OSC sequences (including those with parameters)
+  /* Step 1: Remove OSC sequences (including those with parameters) */
   const removeOsc = input
     .replace(/\x1b\](\d+;[^\x07\x1b]*|\d+[^\x07\x1b]*)\x07/g, '')
     .replace(/\](\d+;[^\n]*|\d+[^\n]*)/g, '');
 
-  // Step 2: Remove ANSI escape sequences and color codes more thoroughly
+  /* Step 2: Remove ANSI escape sequences and color codes */
   const removeAnsi = removeOsc
-    // Remove all escape sequences with parameters
     .replace(/\u001b\[[\?]?[0-9;]*[a-zA-Z]/g, '')
     .replace(/\x1b\[[\?]?[0-9;]*[a-zA-Z]/g, '')
-    // Remove color codes
     .replace(/\u001b\[[0-9;]*m/g, '')
     .replace(/\x1b\[[0-9;]*m/g, '')
-    // Clean up any remaining escape characters
     .replace(/\u001b/g, '')
     .replace(/\x1b/g, '');
 
-  // Step 3: Clean up carriage returns and newlines
+  /* Step 3: Clean up carriage returns and newlines */
   const cleanNewlines = removeAnsi
     .replace(/\r\n/g, '\n')
     .replace(/\r/g, '\n')
     .replace(/\n{3,}/g, '\n\n');
 
-  // Step 4: Add newlines at key breakpoints while preserving paths
+  /* Step 4: Add newlines at key breakpoints while preserving paths */
   const formatOutput = cleanNewlines
-    // Preserve prompt line
     .replace(/^([~\/][^\n❯]+)❯/m, '$1\n❯')
-    // Add newline before command output indicators
     .replace(/(?<!^|\n)>/g, '\n>')
-    // Add newline before error keywords without breaking paths
     .replace(/(?<!^|\n|\w)(error|failed|warning|Error|Failed|Warning):/g, '\n$1:')
-    // Add newline before 'at' in stack traces without breaking paths
     .replace(/(?<!^|\n|\/)(at\s+(?!async|sync))/g, '\nat ')
-    // Ensure 'at async' stays on same line
     .replace(/\bat\s+async/g, 'at async')
-    // Add newline before npm error indicators
     .replace(/(?<!^|\n)(npm ERR!)/g, '\n$1');
 
-  // Step 5: Clean up whitespace while preserving intentional spacing
+  /* Step 5: Clean up whitespace while preserving intentional spacing */
   const cleanSpaces = formatOutput
     .split('\n')
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
     .join('\n');
 
-  // Step 6: Final cleanup
+  /* Step 6: Final cleanup */
   return cleanSpaces
-    .replace(/\n{3,}/g, '\n\n') // Replace multiple newlines with double newlines
-    .replace(/:\s+/g, ': ') // Normalize spacing after colons
-    .replace(/\s{2,}/g, ' ') // Remove multiple spaces
-    .replace(/^\s+|\s+$/g, '') // Trim start and end
-    .replace(/\u0000/g, ''); // Remove null characters
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/:\s+/g, ': ')
+    .replace(/\s{2,}/g, ' ')
+    .replace(/^\s+|\s+$/g, '')
+    .replace(/\u0000/g, '');
 }
 
+/**
+ * Create a new DevonzShell instance.
+ * Factory function for consistent construction.
+ */
 export function newDevonzShellProcess() {
   return new DevonzShell();
 }

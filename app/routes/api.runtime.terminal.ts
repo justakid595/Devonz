@@ -1,0 +1,285 @@
+/**
+ * @route /api/runtime/terminal
+ * Server-side API route for terminal session management.
+ *
+ * POST operations:
+ *   - spawn: Create a new terminal session (shell or command)
+ *   - write: Send input to a terminal session
+ *   - resize: Resize terminal dimensions
+ *   - kill: Terminate a terminal session
+ *   - list: List active sessions for a project
+ *
+ * GET operations:
+ *   - stream: SSE stream of terminal output for a session
+ */
+
+import type { ActionFunctionArgs, LoaderFunctionArgs } from '@remix-run/node';
+import { json } from '@remix-run/node';
+import { RuntimeManager } from '~/lib/runtime/local-runtime';
+import { isValidProjectId } from '~/lib/runtime/runtime-provider';
+import { withSecurity } from '~/lib/security';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('RuntimeTerminal');
+
+/*
+ * ---------------------------------------------------------------------------
+ * GET — SSE output streaming
+ * ---------------------------------------------------------------------------
+ */
+
+async function terminalLoader({ request }: LoaderFunctionArgs) {
+  const url = new URL(request.url);
+  const op = url.searchParams.get('op');
+
+  switch (op) {
+    case 'stream': {
+      const sessionId = url.searchParams.get('sessionId');
+
+      if (!sessionId) {
+        return json({ error: 'Missing sessionId' }, { status: 400 });
+      }
+
+      // Find the session across all runtimes
+      const manager = RuntimeManager.getInstance();
+      const stream = new ReadableStream({
+        start(controller) {
+          const encoder = new TextEncoder();
+
+          // Search all runtimes for the session
+          for (const projectId of manager.listProjects()) {
+            // We need to use an async IIFE to manage the Promise-based getRuntime
+            void (async () => {
+              try {
+                const runtime = await manager.getRuntime(projectId);
+                const session = runtime.getSession(sessionId);
+
+                if (!session) {
+                  return;
+                }
+
+                // Register data listener for this session
+                session.dataListeners.push((data: string) => {
+                  try {
+                    const payload = JSON.stringify({ type: 'data', data });
+                    controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
+                  } catch {
+                    // Stream may have been closed
+                  }
+                });
+
+                // Listen for process exit
+                session.exitPromise
+                  .then((exitCode) => {
+                    try {
+                      const payload = JSON.stringify({ type: 'exit', exitCode });
+                      controller.enqueue(encoder.encode(`data: ${payload}\n\n`));
+                      controller.close();
+                    } catch {
+                      // Stream may already be closed
+                    }
+                  })
+                  .catch(() => {
+                    try {
+                      controller.close();
+                    } catch {
+                      // Already closed
+                    }
+                  });
+
+                // Send initial heartbeat
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'connected', sessionId })}\n\n`));
+              } catch (err) {
+                logger.error('Error setting up terminal stream:', err);
+              }
+            })();
+          }
+
+          // Heartbeat every 15 seconds
+          const heartbeat = setInterval(() => {
+            try {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'heartbeat' })}\n\n`));
+            } catch {
+              clearInterval(heartbeat);
+            }
+          }, 15_000);
+
+          // Clean up on disconnect
+          request.signal.addEventListener('abort', () => {
+            clearInterval(heartbeat);
+
+            try {
+              controller.close();
+            } catch {
+              // Already closed
+            }
+          });
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        },
+      });
+    }
+
+    default: {
+      return json({ error: `Unknown GET operation: ${op}` }, { status: 400 });
+    }
+  }
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * POST — Session management
+ * ---------------------------------------------------------------------------
+ */
+
+async function terminalAction({ request }: ActionFunctionArgs) {
+  const body = await request.json();
+  const { op } = body;
+
+  switch (op) {
+    case 'spawn': {
+      const { projectId, command, cols, rows, env, cwd } = body;
+
+      if (!projectId || !isValidProjectId(projectId)) {
+        return json({ error: 'Invalid or missing projectId' }, { status: 400 });
+      }
+
+      try {
+        const manager = RuntimeManager.getInstance();
+        const runtime = await manager.getRuntime(projectId);
+
+        // If no command given, spawn a default shell
+        const shellCommand = command || (process.platform === 'win32' ? 'cmd.exe' : '/bin/bash');
+        const spawnedProcess = await runtime.spawn(shellCommand, [], {
+          terminal: { cols: cols ?? 80, rows: rows ?? 24 },
+          env,
+          cwd,
+        });
+
+        return json({
+          sessionId: spawnedProcess.id,
+          pid: spawnedProcess.pid,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Spawn failed';
+        logger.error('Terminal spawn failed:', error);
+
+        return json({ error: message }, { status: 500 });
+      }
+    }
+
+    case 'write': {
+      const { sessionId, data } = body;
+
+      if (!sessionId || typeof data !== 'string') {
+        return json({ error: 'Missing sessionId or data' }, { status: 400 });
+      }
+
+      try {
+        const manager = RuntimeManager.getInstance();
+
+        // Search all runtimes for the session
+        for (const projectId of manager.listProjects()) {
+          const runtime = await manager.getRuntime(projectId);
+
+          try {
+            runtime.writeToSession(sessionId, data);
+            return json({ success: true });
+          } catch {
+            // Session not in this runtime, try next
+          }
+        }
+
+        return json({ error: 'Session not found' }, { status: 404 });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Write failed';
+        logger.error('Terminal write failed:', error);
+
+        return json({ error: message }, { status: 500 });
+      }
+    }
+
+    case 'resize': {
+      const { sessionId, cols, rows } = body;
+
+      if (!sessionId || !cols || !rows) {
+        return json({ error: 'Missing sessionId, cols, or rows' }, { status: 400 });
+      }
+
+      // Resize is a no-op for basic child_process (Phase 2: node-pty)
+      logger.debug(`Resize request for ${sessionId}: ${cols}x${rows} (no-op in Phase 1)`);
+
+      return json({ success: true });
+    }
+
+    case 'kill': {
+      const { sessionId, signal } = body;
+
+      if (!sessionId) {
+        return json({ error: 'Missing sessionId' }, { status: 400 });
+      }
+
+      try {
+        const manager = RuntimeManager.getInstance();
+
+        for (const projectId of manager.listProjects()) {
+          const runtime = await manager.getRuntime(projectId);
+
+          try {
+            runtime.killSession(sessionId, signal ?? 'SIGTERM');
+            return json({ success: true });
+          } catch {
+            // Session not in this runtime, try next
+          }
+        }
+
+        return json({ error: 'Session not found' }, { status: 404 });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Kill failed';
+        logger.error('Terminal kill failed:', error);
+
+        return json({ error: message }, { status: 500 });
+      }
+    }
+
+    case 'list': {
+      const { projectId } = body;
+
+      if (!projectId || !isValidProjectId(projectId)) {
+        return json({ error: 'Invalid or missing projectId' }, { status: 400 });
+      }
+
+      try {
+        const manager = RuntimeManager.getInstance();
+        const runtime = await manager.getRuntime(projectId);
+        const sessions = runtime.listSessions();
+
+        return json({ sessions });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'List failed';
+        logger.error('Terminal list failed:', error);
+
+        return json({ error: message }, { status: 500 });
+      }
+    }
+
+    default: {
+      return json({ error: `Unknown operation: ${op}` }, { status: 400 });
+    }
+  }
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * Exports
+ * ---------------------------------------------------------------------------
+ */
+
+export const loader = withSecurity(terminalLoader, { rateLimit: false });
+export const action = withSecurity(terminalAction, { rateLimit: false });

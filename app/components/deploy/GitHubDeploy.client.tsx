@@ -1,7 +1,7 @@
 import { toast } from 'react-toastify';
 import { useStore } from '@nanostores/react';
 import { workbenchStore } from '~/lib/stores/workbench';
-import { webcontainer } from '~/lib/webcontainer';
+import { runtime } from '~/lib/runtime';
 import { path } from '~/utils/path';
 import { useState } from 'react';
 import type { ActionCallbackData } from '~/lib/runtime/message-parser';
@@ -87,12 +87,12 @@ export function useGitHubDeploy() {
       });
 
       // Get all project files instead of just the build directory since we're deploying to a repository
-      const container = await webcontainer;
+      const container = await runtime;
 
       // Get all files recursively - we'll deploy the entire project, not just the build directory
       async function getAllFiles(dirPath: string, basePath: string = ''): Promise<Record<string, string>> {
         const files: Record<string, string> = {};
-        const entries = await container.fs.readdir(dirPath, { withFileTypes: true });
+        const entries = await container.fs.readdir(dirPath);
 
         for (const entry of entries) {
           const fullPath = path.join(dirPath, entry.name);
@@ -102,7 +102,7 @@ export function useGitHubDeploy() {
 
           // Skip node_modules, .git directories and other common excludes
           if (
-            entry.isDirectory() &&
+            entry.isDirectory &&
             (entry.name === 'node_modules' ||
               entry.name === '.git' ||
               entry.name === 'dist' ||
@@ -113,14 +113,14 @@ export function useGitHubDeploy() {
             continue;
           }
 
-          if (entry.isFile()) {
+          if (entry.isFile) {
             // Skip binary files, large files and other common excludes
             if (entry.name.endsWith('.DS_Store') || entry.name.endsWith('.log') || entry.name.startsWith('.env')) {
               continue;
             }
 
             try {
-              const content = await container.fs.readFile(fullPath, 'utf-8');
+              const content = await container.fs.readFile(fullPath);
 
               // Store the file with its relative path, not the full system path
               files[relativePath] = content;
@@ -128,7 +128,7 @@ export function useGitHubDeploy() {
               logger.warn(`Could not read file ${fullPath}:`, error);
               continue;
             }
-          } else if (entry.isDirectory()) {
+          } else if (entry.isDirectory) {
             const subFiles = await getAllFiles(fullPath, relativePath);
             Object.assign(files, subFiles);
           }

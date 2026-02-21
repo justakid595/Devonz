@@ -113,7 +113,7 @@ describe('rewriteUnsupportedCommand', () => {
       const result = rewriteUnsupportedCommand('python3 app.py');
       expect(result.wasRewritten).toBe(true);
       expect(result.command).toContain('echo');
-      expect(result.command).toContain('WebContainer only supports Node.js');
+      expect(result.command).toContain('Python is not available');
     });
 
     it('shows error for Python script with path', () => {

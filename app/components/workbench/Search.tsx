@@ -1,8 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, memo } from 'react';
-import type { TextSearchOptions, TextSearchOnProgressCallback, WebContainer } from '@webcontainer/api';
 import { workbenchStore } from '~/lib/stores/workbench';
-import { webcontainer } from '~/lib/webcontainer';
-import { WORK_DIR } from '~/utils/constants';
 import { debounce } from '~/utils/debounce';
 import { createScopedLogger } from '~/utils/logger';
 
@@ -16,69 +13,42 @@ interface DisplayMatch {
   matchCharEnd: number;
 }
 
-interface ApiSearchMatch {
-  preview: { text: string; matches: Array<{ startLineNumber: number }> };
-  ranges: Array<{ startLineNumber: number; startColumn: number; endColumn: number }>;
-}
-
+/**
+ * Search project files via the server-side search API.
+ *
+ * Replaces the WebContainer `internal.textSearch()` private API with
+ * a POST request to `/api/runtime/search`.
+ */
 async function performTextSearch(
-  instance: WebContainer,
+  projectId: string,
   query: string,
-  options: Omit<TextSearchOptions, 'folders'>,
-  onProgress: (results: DisplayMatch[]) => void,
-): Promise<void> {
-  if (!instance || typeof instance.internal?.textSearch !== 'function') {
-    logger.error('WebContainer instance not available or internal searchText method is missing/not a function.');
+  options: {
+    includes?: string[];
+    excludes?: string[];
+    caseSensitive?: boolean;
+    isRegex?: boolean;
+    isWordMatch?: boolean;
+    resultLimit?: number;
+  },
+): Promise<DisplayMatch[]> {
+  const response = await fetch('/api/runtime/search', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      projectId,
+      query,
+      ...options,
+    }),
+  });
 
-    return;
+  if (!response.ok) {
+    const errorBody = await response.json().catch(() => ({ error: 'Unknown error' }));
+    throw new Error(errorBody.error ?? `Search failed with status ${response.status}`);
   }
 
-  const searchOptions: TextSearchOptions = {
-    ...options,
-    folders: [WORK_DIR],
-  };
+  const data = await response.json();
 
-  const progressCallback: TextSearchOnProgressCallback = (filePath: string, apiMatches: ApiSearchMatch[]) => {
-    const displayMatches: DisplayMatch[] = [];
-
-    apiMatches.forEach((apiMatch) => {
-      const previewLines = apiMatch.preview.text.split('\n');
-
-      apiMatch.ranges.forEach((range) => {
-        let previewLineText = '(Preview line not found)';
-        let lineIndexInPreview = -1;
-
-        if (apiMatch.preview.matches.length > 0) {
-          const previewStartLine = apiMatch.preview.matches[0].startLineNumber;
-          lineIndexInPreview = range.startLineNumber - previewStartLine;
-        }
-
-        if (lineIndexInPreview >= 0 && lineIndexInPreview < previewLines.length) {
-          previewLineText = previewLines[lineIndexInPreview];
-        } else {
-          previewLineText = previewLines[0] ?? '(Preview unavailable)';
-        }
-
-        displayMatches.push({
-          path: filePath,
-          lineNumber: range.startLineNumber,
-          previewText: previewLineText,
-          matchCharStart: range.startColumn,
-          matchCharEnd: range.endColumn,
-        });
-      });
-    });
-
-    if (displayMatches.length > 0) {
-      onProgress(displayMatches);
-    }
-  };
-
-  try {
-    await instance.internal.textSearch(query, searchOptions, progressCallback);
-  } catch (error) {
-    logger.error('Error during internal text search:', error);
-  }
+  return data.results as DisplayMatch[];
 }
 
 function groupResultsByFile(results: DisplayMatch[]): Record<string, DisplayMatch[]> {
@@ -96,7 +66,7 @@ function groupResultsByFile(results: DisplayMatch[]): Record<string, DisplayMatc
   );
 }
 
-export const Search = memo(function Search() {
+export const Search = memo(() => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<DisplayMatch[]>([]);
   const [isSearching, setIsSearching] = useState(false);
@@ -134,26 +104,16 @@ export const Search = memo(function Search() {
     const start = Date.now();
 
     try {
-      const instance = await webcontainer;
-      const options: Omit<TextSearchOptions, 'folders'> = {
-        homeDir: WORK_DIR, // Adjust this path as needed
+      const results = await performTextSearch('default', query, {
         includes: ['**/*.*'],
         excludes: ['**/node_modules/**', '**/package-lock.json', '**/.git/**', '**/dist/**', '**/*.lock'],
-        gitignore: true,
-        requireGit: false,
-        globalIgnoreFiles: true,
-        ignoreSymlinks: false,
         resultLimit: 500,
         isRegex: false,
         caseSensitive: false,
         isWordMatch: false,
-      };
+      });
 
-      const progressHandler = (batchResults: DisplayMatch[]) => {
-        setSearchResults((prevResults) => [...prevResults, ...batchResults]);
-      };
-
-      await performTextSearch(instance, query, options, progressHandler);
+      setSearchResults(results);
     } catch (error) {
       logger.error('Failed to initiate search:', error);
     } finally {

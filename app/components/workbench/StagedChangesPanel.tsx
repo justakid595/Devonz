@@ -6,7 +6,7 @@ import { useLocation } from '@remix-run/react';
 import { classNames } from '~/utils/classNames';
 import { Button } from '~/components/ui/Button';
 import { IconButton } from '~/components/ui/IconButton';
-import { webcontainer } from '~/lib/webcontainer';
+import { runtime } from '~/lib/runtime';
 import { toast } from 'react-toastify';
 import { workbenchStore } from '~/lib/stores/workbench';
 import { usePreviewStore } from '~/lib/stores/previews';
@@ -294,7 +294,7 @@ export const StagedChangesPanel = memo(() => {
     await shell.ready();
 
     for (const cmd of commands) {
-      // Rewrite unsupported runtime commands for WebContainer
+      // Rewrite unsupported runtime commands
       const rewriteResult = rewriteUnsupportedCommand(cmd.command);
       const commandToRun = rewriteResult.wasRewritten ? rewriteResult.command : cmd.command;
 
@@ -321,11 +321,11 @@ export const StagedChangesPanel = memo(() => {
     toast.success(`Executed ${commands.length} command(s)`);
   }, [pendingCmds]);
 
-  // Helper to apply accepted changes to WebContainer
-  const applyChangesToWebContainer = useCallback(async () => {
+  /* Helper to apply accepted changes to the runtime filesystem */
+  const applyChangesToRuntime = useCallback(async () => {
     try {
-      const wc = await webcontainer;
-      const result = await applyAcceptedChanges(wc);
+      const rt = await runtime;
+      const result = await applyAcceptedChanges(rt);
 
       if (result.failed.length > 0) {
         toast.error(`Failed to apply ${result.failed.length} file(s)`);
@@ -334,18 +334,18 @@ export const StagedChangesPanel = memo(() => {
       }
     } catch (error) {
       logger.error('Error applying changes:', error);
-      toast.error('Failed to apply changes to WebContainer');
+      toast.error('Failed to apply changes to runtime');
     }
   }, []);
 
-  // Helper to revert rejected changes to WebContainer
-  const revertChangesToWebContainer = useCallback(async () => {
+  /* Helper to revert rejected changes via the runtime filesystem */
+  const revertChangesToRuntime = useCallback(async () => {
     try {
       // Get rejected changes BEFORE applying (since applyRejectedChanges removes them)
       const rejectedChanges = getRejectedChanges();
 
-      const wc = await webcontainer;
-      const result = await applyRejectedChanges(wc);
+      const rt = await runtime;
+      const result = await applyRejectedChanges(rt);
 
       // Also update the filesStore for each successfully reverted file
       for (const filePath of result.reverted) {
@@ -397,11 +397,11 @@ export const StagedChangesPanel = memo(() => {
 
       try {
         acceptChange(filePath);
-        await applyChangesToWebContainer();
+        await applyChangesToRuntime();
 
-        // Take a snapshot after changes are applied to persist the new file state
+        /* Take a snapshot after changes are applied to persist the new file state */
         try {
-          await takeDelayedSnapshot(150); // 150ms delay for WebContainer sync
+          await takeDelayedSnapshot(150); // 150ms delay for runtime sync
         } catch (snapshotError) {
           logger.error('Failed to take snapshot after single accept:', snapshotError);
         }
@@ -409,7 +409,7 @@ export const StagedChangesPanel = memo(() => {
         setIsApplying(false);
       }
     },
-    [applyChangesToWebContainer],
+    [applyChangesToRuntime],
   );
 
   const handleReject = useCallback(async (filePath: string) => {
@@ -421,8 +421,8 @@ export const StagedChangesPanel = memo(() => {
 
       rejectChange(filePath);
 
-      const wc = await webcontainer;
-      const result = await applyRejectedChange(filePath, wc);
+      const rt = await runtime;
+      const result = await applyRejectedChange(filePath, rt);
 
       if (!result.success) {
         toast.error(`Failed to revert: ${result.error}`);
@@ -466,17 +466,17 @@ export const StagedChangesPanel = memo(() => {
   }, []);
 
   /**
-   * Toggle preview mode - temporarily apply/restore pending changes in WebContainer
+   * Toggle preview mode - temporarily apply/restore pending changes in the runtime
    */
   const handleTogglePreviewMode = useCallback(async () => {
     setIsApplying(true);
 
     try {
-      const wc = await webcontainer;
+      const rt = await runtime;
 
       if (isPreviewMode) {
         // Exit preview mode - restore original files
-        const result = await exitPreviewMode(wc);
+        const result = await exitPreviewMode(rt);
 
         if (result.failed.length > 0) {
           toast.error(`Failed to exit preview for ${result.failed.length} file(s)`);
@@ -485,7 +485,7 @@ export const StagedChangesPanel = memo(() => {
         }
       } else {
         // Enter preview mode - apply pending files temporarily
-        const result = await enterPreviewMode(wc);
+        const result = await enterPreviewMode(rt);
 
         if (result.failed.length > 0) {
           toast.error(`Failed to preview ${result.failed.length} file(s)`);
@@ -498,7 +498,7 @@ export const StagedChangesPanel = memo(() => {
            * because Vite's HMR cannot properly handle config changes
            */
           if (result.requiresHardRefresh) {
-            // Wait for WebContainer to process the file changes
+            // Wait for runtime to process the file changes
             await new Promise((resolve) => setTimeout(resolve, 500));
 
             // Trigger hard refresh for all previews
@@ -525,14 +525,14 @@ export const StagedChangesPanel = memo(() => {
 
       if (isPreviewMode) {
         /*
-         * Already in preview mode - files are already written to WebContainer
+         * Already in preview mode - files are already written to runtime
          * Just clear the preview mode flag and clear staging
          * No need to re-write files
          */
         stagingStore.setKey('isPreviewMode', false);
       } else {
         // Not in preview mode - apply files normally
-        await applyChangesToWebContainer();
+        await applyChangesToRuntime();
       }
 
       // Execute pending commands after files are applied
@@ -543,7 +543,7 @@ export const StagedChangesPanel = memo(() => {
        * This ensures the files are saved even when staging mode delays writes
        */
       try {
-        await takeDelayedSnapshot(150); // 150ms delay for WebContainer sync
+        await takeDelayedSnapshot(150); // 150ms delay for runtime sync
       } catch (snapshotError) {
         logger.error('Failed to take snapshot after accept:', snapshotError);
 
@@ -555,7 +555,7 @@ export const StagedChangesPanel = memo(() => {
     } finally {
       setIsApplying(false);
     }
-  }, [applyChangesToWebContainer, executePendingCommands, isPreviewMode]);
+  }, [applyChangesToRuntime, executePendingCommands, isPreviewMode]);
 
   const handleRejectAll = useCallback(async () => {
     setIsApplying(true);
@@ -566,15 +566,15 @@ export const StagedChangesPanel = memo(() => {
 
       if (isPreviewMode) {
         // Exit preview mode first - this restores original files
-        const wc = await webcontainer;
-        await exitPreviewMode(wc);
+        const rt = await runtime;
+        await exitPreviewMode(rt);
       }
 
       rejectAllChanges();
 
       if (!isPreviewMode) {
         // Only revert if we weren't in preview mode (exitPreviewMode already restored)
-        await revertChangesToWebContainer();
+        await revertChangesToRuntime();
       }
 
       clearPendingCommands();
@@ -607,7 +607,7 @@ export const StagedChangesPanel = memo(() => {
     } finally {
       setIsApplying(false);
     }
-  }, [revertChangesToWebContainer, isPreviewMode, location.search]);
+  }, [revertChangesToRuntime, isPreviewMode, location.search]);
 
   // Don't render if staging is disabled or no pending changes/commands
   if (!settings.isEnabled || (!hasPending && !hasCmds)) {

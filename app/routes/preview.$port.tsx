@@ -5,26 +5,26 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 const PREVIEW_CHANNEL = 'preview-updates';
 
 export async function loader({ params }: LoaderFunctionArgs) {
-  const previewId = params.id;
+  const port = params.port;
 
-  if (!previewId) {
-    throw new Response('Preview ID is required', { status: 400 });
+  if (!port || !/^\d+$/.test(port)) {
+    throw new Response('A valid port number is required', { status: 400 });
   }
 
-  return json({ previewId });
+  return json({ port });
 }
 
-export default function WebContainerPreview() {
-  const { previewId } = useLoaderData<typeof loader>();
+export default function PreviewWindow() {
+  const { port } = useLoaderData<typeof loader>();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const broadcastChannelRef = useRef<BroadcastChannel>();
   const [previewUrl, setPreviewUrl] = useState('');
 
-  // Handle preview refresh
+  /* Handle preview refresh */
   const handleRefresh = useCallback(() => {
     if (iframeRef.current && previewUrl) {
-      // Force a clean reload
       iframeRef.current.src = '';
+
       requestAnimationFrame(() => {
         if (iframeRef.current) {
           iframeRef.current.src = previewUrl;
@@ -33,15 +33,14 @@ export default function WebContainerPreview() {
     }
   }, [previewUrl]);
 
-  // Handle hard refresh with cache-busting for config file changes
+  /* Handle hard refresh with cache-busting for config file changes */
   const handleHardRefresh = useCallback(() => {
     if (iframeRef.current && previewUrl) {
-      // Add cache-busting query param to force a completely fresh load
       const url = new URL(previewUrl);
       url.searchParams.set('_t', Date.now().toString());
 
-      // Clear and reload with cache-busting URL
       iframeRef.current.src = '';
+
       requestAnimationFrame(() => {
         if (iframeRef.current) {
           iframeRef.current.src = url.toString();
@@ -50,17 +49,17 @@ export default function WebContainerPreview() {
     }
   }, [previewUrl]);
 
-  // Notify other tabs that this preview is ready
+  /* Notify other tabs that this preview is ready */
   const notifyPreviewReady = useCallback(() => {
     if (broadcastChannelRef.current && previewUrl) {
       broadcastChannelRef.current.postMessage({
         type: 'preview-ready',
-        previewId,
+        previewId: port,
         url: previewUrl,
         timestamp: Date.now(),
       });
     }
-  }, [previewId, previewUrl]);
+  }, [port, previewUrl]);
 
   useEffect(() => {
     const supportsBroadcastChannel = typeof window !== 'undefined' && typeof window.BroadcastChannel === 'function';
@@ -68,11 +67,9 @@ export default function WebContainerPreview() {
     if (supportsBroadcastChannel) {
       broadcastChannelRef.current = new window.BroadcastChannel(PREVIEW_CHANNEL);
 
-      // Listen for preview updates
       broadcastChannelRef.current.onmessage = (event) => {
-        if (event.data.previewId === previewId) {
+        if (event.data.previewId === port) {
           if (event.data.type === 'hard-refresh') {
-            // Config file changes need a full cache-busting reload
             handleHardRefresh();
           } else if (event.data.type === 'refresh-preview' || event.data.type === 'file-change') {
             handleRefresh();
@@ -83,29 +80,26 @@ export default function WebContainerPreview() {
       broadcastChannelRef.current = undefined;
     }
 
-    // Construct the WebContainer preview URL
-    const url = `https://${previewId}.local-credentialless.webcontainer-api.io`;
+    /* Construct the localhost preview URL from the port */
+    const url = `http://localhost:${port}`;
     setPreviewUrl(url);
 
-    // Set the iframe src
     if (iframeRef.current) {
       iframeRef.current.src = url;
     }
 
-    // Notify other tabs that this preview is ready
     notifyPreviewReady();
 
-    // Cleanup
     return () => {
       broadcastChannelRef.current?.close();
     };
-  }, [previewId, handleRefresh, handleHardRefresh, notifyPreviewReady]);
+  }, [port, handleRefresh, handleHardRefresh, notifyPreviewReady]);
 
   return (
     <div className="w-full h-full">
       <iframe
         ref={iframeRef}
-        title="WebContainer Preview"
+        title="Preview"
         className="w-full h-full border-none"
         sandbox="allow-scripts allow-forms allow-popups allow-modals allow-storage-access-by-user-activation allow-same-origin"
         allow="cross-origin-isolated"

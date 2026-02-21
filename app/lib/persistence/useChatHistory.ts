@@ -20,7 +20,7 @@ import {
 } from './db';
 import type { FileMap } from '~/lib/stores/files';
 import type { Snapshot } from './types';
-import { webcontainer } from '~/lib/webcontainer';
+import { runtime } from '~/lib/runtime';
 import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('ChatHistory');
@@ -46,6 +46,11 @@ export interface ChatHistoryItem {
 const persistenceEnabled = !import.meta.env.VITE_DISABLE_PERSISTENCE;
 
 export const db = persistenceEnabled ? await openDatabase() : undefined;
+
+// Start auto-backup once the database is available
+if (db) {
+  import('./autoBackup').then(({ startAutoBackup }) => startAutoBackup(db!));
+}
 
 export const chatId = atom<string | undefined>(undefined);
 export const description = atom<string | undefined>(undefined);
@@ -229,7 +234,7 @@ export function useChatHistory() {
   }, [db, takeSnapshot]);
 
   const restoreSnapshot = useCallback(async (id: string, snapshot?: Snapshot) => {
-    const container = await webcontainer;
+    const container = await runtime;
 
     const validSnapshot = snapshot || { chatIndex: '', files: {} };
 
@@ -246,8 +251,8 @@ export function useChatHistory() {
     workbenchStore.files.set(mergedFiles);
     workbenchStore.setDocuments(mergedFiles);
 
-    // Write files to WebContainer in parallel (for runtime)
-    const dirPromises: Promise<string>[] = [];
+    /* Write files to runtime filesystem in parallel */
+    const dirPromises: Promise<void>[] = [];
     const filePromises: Promise<void>[] = [];
 
     Object.entries(validSnapshot.files).forEach(([key, value]) => {
@@ -260,9 +265,7 @@ export function useChatHistory() {
       if (value?.type === 'folder') {
         dirPromises.push(container.fs.mkdir(adjustedKey, { recursive: true }));
       } else if (value?.type === 'file') {
-        filePromises.push(
-          container.fs.writeFile(adjustedKey, value.content, { encoding: value.isBinary ? undefined : 'utf8' }),
-        );
+        filePromises.push(container.fs.writeFile(adjustedKey, value.content));
       }
     });
 

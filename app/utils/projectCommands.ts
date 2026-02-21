@@ -17,15 +17,15 @@ interface FileContent {
 }
 
 /**
- * Make a command non-interactive for WebContainer execution.
+ * Make a command non-interactive for runtime execution.
  *
  * NOTE: We intentionally do NOT add env var exports or extra npm flags here.
- * WebContainer's `.npmrc` (injected at boot) already has:
+ * The runtime's `.npmrc` (injected at boot) already has:
  *   legacy-peer-deps=true, yes=true, fund=false, audit=false, loglevel=error
  *
- * Adding `export CI=true ...` prefix breaks jsh (WebContainer shell) and
- * also prevents the action runner's --legacy-peer-deps injection regex
- * from matching (it expects commands to start with `npm install`).
+ * Adding `export CI=true ...` prefix prevents the action runner's
+ * --legacy-peer-deps injection regex from matching
+ * (it expects commands to start with `npm install`).
  */
 function makeNonInteractive(command: string): string {
   const interactivePackages = [
@@ -88,8 +88,8 @@ export async function detectProjectCommands(files: FileContent[]): Promise<Proje
       if (availableCommand) {
         /*
          * Use the script content to build a more reliable start command.
-         * WebContainer's jsh shell often fails to find binaries from npm scripts
-         * (e.g., "jsh: command not found: next") because node_modules/.bin
+         * Some shells may fail to find binaries from npm scripts
+         * (e.g., "command not found: next") because node_modules/.bin
          * isn't always on PATH. Using npx ensures the binary is always found.
          */
         const scriptContent = scripts[availableCommand] || '';

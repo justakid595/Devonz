@@ -1,14 +1,11 @@
 import { json } from '@remix-run/node';
 import { execSync } from 'child_process';
 import { existsSync } from 'fs';
-import { createScopedLogger } from '~/utils/logger';
+import { handleApiError } from '~/lib/api/apiUtils';
 import { withSecurity } from '~/lib/security';
 
-const logger = createScopedLogger('GitInfo');
-
 async function gitInfoLoader() {
-  try {
-    // Check if we're in a git repository
+  return handleApiError('GitInfo', async () => {
     if (!existsSync('.git')) {
       return json({
         branch: 'unknown',
@@ -17,26 +14,20 @@ async function gitInfoLoader() {
       });
     }
 
-    // Get current branch
     const branch = execSync('git rev-parse --abbrev-ref HEAD', { encoding: 'utf8' }).trim();
-
-    // Get current commit hash
     const commit = execSync('git rev-parse HEAD', { encoding: 'utf8' }).trim();
 
-    // Check if working directory is dirty
     const statusOutput = execSync('git status --porcelain', { encoding: 'utf8' });
     const isDirty = statusOutput.trim().length > 0;
 
-    // Get remote URL
     let remoteUrl: string | undefined;
 
     try {
       remoteUrl = execSync('git remote get-url origin', { encoding: 'utf8' }).trim();
     } catch {
-      // No remote origin, leave as undefined
+      // No remote origin
     }
 
-    // Get last commit info
     let lastCommit: { message: string; date: string; author: string } | undefined;
 
     try {
@@ -58,18 +49,7 @@ async function gitInfoLoader() {
       remoteUrl,
       lastCommit,
     });
-  } catch (error) {
-    logger.error('Error fetching git info:', error);
-    return json(
-      {
-        branch: 'error',
-        commit: 'error',
-        isDirty: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      },
-      { status: 500 },
-    );
-  }
+  });
 }
 
 export const loader = withSecurity(gitInfoLoader as any, {

@@ -1,5 +1,5 @@
 import { json, type LoaderFunctionArgs } from '@remix-run/node';
-import { getApiKeysFromCookie } from '~/lib/api/cookies';
+import { ApiError, externalFetch, handleApiError, resolveToken, unauthorizedResponse } from '~/lib/api/apiUtils';
 import { withSecurity } from '~/lib/security';
 import type { GitHubUserResponse, GitHubStats } from '~/types/GitHub';
 import { createScopedLogger } from '~/utils/logger';
@@ -28,32 +28,20 @@ interface GitHubRepoApiResponse {
   branches_count?: number;
 }
 
-async function githubStatsLoader({ request, context }: LoaderFunctionArgs) {
-  try {
-    // Get API keys from cookies (server-side only)
-    const cookieHeader = request.headers.get('Cookie');
-    const apiKeys = getApiKeysFromCookie(cookieHeader);
+const GH_HEADERS = { Accept: 'application/vnd.github.v3+json' };
 
-    // Try to get GitHub token from various sources
-    const githubToken =
-      apiKeys.GITHUB_API_KEY ||
-      apiKeys.VITE_GITHUB_ACCESS_TOKEN ||
-      context?.cloudflare?.env?.GITHUB_TOKEN ||
-      context?.cloudflare?.env?.VITE_GITHUB_ACCESS_TOKEN ||
-      process.env.GITHUB_TOKEN ||
-      process.env.VITE_GITHUB_ACCESS_TOKEN;
+async function githubStatsLoader({ request, context }: LoaderFunctionArgs) {
+  return handleApiError('GitHubStats', async () => {
+    const githubToken = resolveToken(request, context, 'GITHUB_API_KEY', 'VITE_GITHUB_ACCESS_TOKEN', 'GITHUB_TOKEN');
 
     if (!githubToken) {
-      return json({ error: 'GitHub token not found' }, { status: 401 });
+      return unauthorizedResponse('GitHub');
     }
 
-    // Get user info first
-    const userResponse = await fetch('https://api.github.com/user', {
-      headers: {
-        Accept: 'application/vnd.github.v3+json',
-        Authorization: `Bearer ${githubToken}`,
-        'User-Agent': 'devonz-app',
-      },
+    const userResponse = await externalFetch({
+      url: 'https://api.github.com/user',
+      token: githubToken,
+      headers: GH_HEADERS,
     });
 
     if (!userResponse.ok) {
@@ -61,30 +49,24 @@ async function githubStatsLoader({ request, context }: LoaderFunctionArgs) {
         return json({ error: 'Invalid GitHub token' }, { status: 401 });
       }
 
-      throw new Error(`GitHub API error: ${userResponse.status}`);
+      throw new ApiError(`GitHub API error: ${userResponse.status}`, userResponse.status);
     }
 
     const user = (await userResponse.json()) as GitHubUserResponse;
 
-    // Fetch repositories with pagination
     let allRepos: GitHubRepoApiResponse[] = [];
     let page = 1;
     let hasMore = true;
 
     while (hasMore) {
-      const repoResponse = await fetch(
-        `https://api.github.com/user/repos?sort=updated&per_page=100&page=${page}&affiliation=owner,organization_member`,
-        {
-          headers: {
-            Accept: 'application/vnd.github.v3+json',
-            Authorization: `Bearer ${githubToken}`,
-            'User-Agent': 'devonz-app',
-          },
-        },
-      );
+      const repoResponse = await externalFetch({
+        url: `https://api.github.com/user/repos?sort=updated&per_page=100&page=${page}&affiliation=owner,organization_member`,
+        token: githubToken,
+        headers: GH_HEADERS,
+      });
 
       if (!repoResponse.ok) {
-        throw new Error(`GitHub API error: ${repoResponse.status}`);
+        throw new ApiError(`GitHub API error: ${repoResponse.status}`, repoResponse.status);
       }
 
       const repos = (await repoResponse.json()) as GitHubRepoApiResponse[];
@@ -97,21 +79,18 @@ async function githubStatsLoader({ request, context }: LoaderFunctionArgs) {
       }
     }
 
-    // Fetch branch counts for repositories (limit to first 50 repos to avoid rate limits)
     const reposWithBranches = await Promise.allSettled(
       allRepos.slice(0, 50).map(async (repo) => {
         try {
-          const branchesResponse = await fetch(`https://api.github.com/repos/${repo.full_name}/branches?per_page=1`, {
-            headers: {
-              Accept: 'application/vnd.github.v3+json',
-              Authorization: `Bearer ${githubToken}`,
-              'User-Agent': 'devonz-app',
-            },
+          const branchesResponse = await externalFetch({
+            url: `https://api.github.com/repos/${repo.full_name}/branches?per_page=1`,
+            token: githubToken,
+            headers: GH_HEADERS,
           });
 
           if (branchesResponse.ok) {
             const linkHeader = branchesResponse.headers.get('Link');
-            let branchesCount = 1; // At least 1 branch (default)
+            let branchesCount = 1;
 
             if (linkHeader) {
               const match = linkHeader.match(/page=(\d+)>; rel="last"/);
@@ -135,7 +114,6 @@ async function githubStatsLoader({ request, context }: LoaderFunctionArgs) {
       }),
     );
 
-    // Update repositories with branch information where available
     allRepos = allRepos.map((repo, index) => {
       if (index < reposWithBranches.length && reposWithBranches[index].status === 'fulfilled') {
         return reposWithBranches[index].value;
@@ -144,12 +122,10 @@ async function githubStatsLoader({ request, context }: LoaderFunctionArgs) {
       return repo;
     });
 
-    // Calculate comprehensive stats
     const now = new Date();
     const publicRepos = allRepos.filter((repo) => !repo.private).length;
     const privateRepos = allRepos.filter((repo) => repo.private).length;
 
-    // Language statistics
     const languageStats = new Map<string, number>();
     allRepos.forEach((repo) => {
       if (repo.language) {
@@ -157,15 +133,11 @@ async function githubStatsLoader({ request, context }: LoaderFunctionArgs) {
       }
     });
 
-    // Activity stats
     const totalStars = allRepos.reduce((sum, repo) => sum + (repo.stargazers_count || 0), 0);
     const totalForks = allRepos.reduce((sum, repo) => sum + (repo.forks_count || 0), 0);
 
-    // Recent activity (repos updated in last 30 days)
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-
-    // Popular repositories (top 10 by stars)
 
     const stats: GitHubStats = {
       repos: allRepos.map((repo) => ({
@@ -200,21 +172,12 @@ async function githubStatsLoader({ request, context }: LoaderFunctionArgs) {
       totalForks,
       followers: user.followers || 0,
       publicGists: user.public_gists || 0,
-      privateGists: 0, // GitHub API doesn't provide private gists count directly
+      privateGists: 0,
       lastUpdated: now.toISOString(),
     };
 
     return json(stats);
-  } catch (error) {
-    logger.error('Error fetching GitHub stats:', error);
-    return json(
-      {
-        error: 'Failed to fetch GitHub statistics',
-        details: error instanceof Error ? error.message : String(error),
-      },
-      { status: 500 },
-    );
-  }
+  });
 }
 
 export const loader = withSecurity(githubStatsLoader, {

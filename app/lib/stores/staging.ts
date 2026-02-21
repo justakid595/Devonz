@@ -99,7 +99,7 @@ export interface StagingState {
   /** Pending shell/start commands queued until files are accepted */
   pendingCommands: PendingCommand[];
 
-  /** Whether preview mode is active (pending files temporarily applied to WebContainer) */
+  /** Whether preview mode is active (pending files temporarily applied to runtime filesystem) */
   isPreviewMode: boolean;
 
   /** Last message ID where changes were accepted - used for rewind on reject */
@@ -770,52 +770,47 @@ export function getRejectedChanges(): StagedChange[] {
 }
 
 /**
- * Apply all accepted changes to WebContainer filesystem
- * This actually writes the files - must be called after acceptChange/acceptAllChanges
+ * Apply all accepted changes to the runtime filesystem.
+ * This actually writes the files — must be called after acceptChange/acceptAllChanges.
  *
- * @param webcontainer - The WebContainer instance to write files to
+ * @param rt - The runtime instance to write files to
  * @returns Object with arrays of applied and failed file paths
  */
-export async function applyAcceptedChanges(webcontainer: {
+export async function applyAcceptedChanges(rt: {
   fs: {
     writeFile: (path: string, content: string) => Promise<void>;
     rm: (path: string, options?: { recursive?: boolean }) => Promise<void>;
-    mkdir: (path: string, options: { recursive: true }) => Promise<string>;
+    mkdir: (path: string, options: { recursive: true }) => Promise<void>;
   };
 }): Promise<{ applied: string[]; failed: Array<{ path: string; error: string }> }> {
   const accepted = getAcceptedChanges();
   const applied: string[] = [];
   const failed: Array<{ path: string; error: string }> = [];
 
-  logger.info(`Applying ${accepted.length} accepted changes to WebContainer`);
+  logger.info(`Applying ${accepted.length} accepted changes to runtime filesystem`);
 
   for (const change of accepted) {
     try {
-      /*
-       * Convert absolute path to relative path for WebContainer
-       * Paths like "/home/project/src/file.ts" -> "src/file.ts"
-       */
+      /* Convert absolute path to relative path: "/home/project/src/file.ts" -> "src/file.ts" */
       const relativePath = change.filePath.replace(/^\/home\/project\/?/, '');
 
       if (change.type === 'delete') {
-        // Delete the file
-        await webcontainer.fs.rm(relativePath, { recursive: false });
+        await rt.fs.rm(relativePath, { recursive: false });
         logger.debug(`Deleted file: ${relativePath}`);
       } else {
-        // Create directory if needed
+        /* Create directory if needed */
         const pathParts = relativePath.split('/');
         const dir = pathParts.slice(0, -1).join('/');
 
         if (dir) {
           try {
-            await webcontainer.fs.mkdir(dir, { recursive: true });
+            await rt.fs.mkdir(dir, { recursive: true });
           } catch {
-            // Directory might already exist, that's fine
+            /* Directory might already exist */
           }
         }
 
-        // Write the file
-        await webcontainer.fs.writeFile(relativePath, change.newContent);
+        await rt.fs.writeFile(relativePath, change.newContent);
         logger.debug(`Wrote file: ${relativePath}`);
       }
 
@@ -838,37 +833,34 @@ export async function applyAcceptedChanges(webcontainer: {
 }
 
 /**
- * Revert all rejected changes by restoring original content to WebContainer filesystem
- * This actually restores the files - must be called after rejectChange/rejectAllChanges
+ * Revert all rejected changes by restoring original content to the runtime filesystem.
+ * This actually restores the files — must be called after rejectChange/rejectAllChanges.
  *
- * @param webcontainer - The WebContainer instance to write files to
+ * @param rt - The runtime instance to write files to
  * @returns Object with arrays of reverted and failed file paths
  */
-export async function applyRejectedChanges(webcontainer: {
+export async function applyRejectedChanges(rt: {
   fs: {
     writeFile: (path: string, content: string) => Promise<void>;
     rm: (path: string, options?: { recursive?: boolean }) => Promise<void>;
-    mkdir: (path: string, options: { recursive: true }) => Promise<string>;
+    mkdir: (path: string, options: { recursive: true }) => Promise<void>;
   };
 }): Promise<{ reverted: string[]; failed: Array<{ path: string; error: string }> }> {
   const rejected = getRejectedChanges();
   const reverted: string[] = [];
   const failed: Array<{ path: string; error: string }> = [];
 
-  logger.info(`Reverting ${rejected.length} rejected changes in WebContainer`);
+  logger.info(`Reverting ${rejected.length} rejected changes in runtime filesystem`);
 
   for (const change of rejected) {
     try {
-      /*
-       * Convert absolute path to relative path for WebContainer
-       * Paths like "/home/project/src/file.ts" -> "src/file.ts"
-       */
+      /* Convert absolute path to relative path: "/home/project/src/file.ts" -> "src/file.ts" */
       const relativePath = change.filePath.replace(/^\/home\/project\/?/, '');
 
       if (change.type === 'create') {
         /*
-         * File was newly created and staged - it was never written to WebContainer
-         * Just remove from staging, no filesystem operation needed
+         * File was newly created and staged — it was never written to the filesystem.
+         * Just remove from staging, no filesystem operation needed.
          */
         logger.debug(`Removing staged new file from tracking: ${relativePath}`);
       } else if (change.type === 'delete' && change.originalContent !== null) {
@@ -878,17 +870,17 @@ export async function applyRejectedChanges(webcontainer: {
 
         if (dir) {
           try {
-            await webcontainer.fs.mkdir(dir, { recursive: true });
+            await rt.fs.mkdir(dir, { recursive: true });
           } catch {
-            // Directory might already exist, that's fine
+            /* Directory might already exist */
           }
         }
 
-        await webcontainer.fs.writeFile(relativePath, change.originalContent);
+        await rt.fs.writeFile(relativePath, change.originalContent);
         logger.debug(`Restored deleted file: ${relativePath}`);
       } else if (change.originalContent !== null) {
-        // File was modified - restore original content
-        await webcontainer.fs.writeFile(relativePath, change.originalContent);
+        /* File was modified — restore original content */
+        await rt.fs.writeFile(relativePath, change.originalContent);
         logger.debug(`Restored original content: ${relativePath}`);
       }
 
@@ -911,19 +903,19 @@ export async function applyRejectedChanges(webcontainer: {
 }
 
 /**
- * Revert a single rejected change by restoring original content to WebContainer filesystem
+ * Revert a single rejected change by restoring original content to the runtime filesystem.
  *
  * @param filePath - The file path of the rejected change to revert
- * @param webcontainer - The WebContainer instance to write files to
+ * @param rt - The runtime instance to write files to
  * @returns Object indicating success or failure
  */
 export async function applyRejectedChange(
   filePath: string,
-  webcontainer: {
+  rt: {
     fs: {
       writeFile: (path: string, content: string) => Promise<void>;
       rm: (path: string, options?: { recursive?: boolean }) => Promise<void>;
-      mkdir: (path: string, options: { recursive: true }) => Promise<string>;
+      mkdir: (path: string, options: { recursive: true }) => Promise<void>;
     };
   },
 ): Promise<{ success: boolean; error?: string }> {
@@ -942,28 +934,28 @@ export async function applyRejectedChange(
 
     if (change.type === 'create') {
       /*
-       * File was newly created and staged - it was never written to WebContainer
-       * Just remove from staging, no filesystem operation needed
+       * File was newly created and staged — it was never written to the filesystem.
+       * Just remove from staging, no filesystem operation needed.
        */
       logger.debug(`Removing staged new file from tracking: ${relativePath}`);
     } else if (change.type === 'delete' && change.originalContent !== null) {
-      // File was deleted - recreate it with original content
+      /* File was deleted — recreate it with original content */
       const pathParts = relativePath.split('/');
       const dir = pathParts.slice(0, -1).join('/');
 
       if (dir) {
         try {
-          await webcontainer.fs.mkdir(dir, { recursive: true });
+          await rt.fs.mkdir(dir, { recursive: true });
         } catch {
-          // Directory might already exist
+          /* Directory might already exist */
         }
       }
 
-      await webcontainer.fs.writeFile(relativePath, change.originalContent);
+      await rt.fs.writeFile(relativePath, change.originalContent);
       logger.debug(`Restored deleted file: ${relativePath}`);
     } else if (change.originalContent !== null) {
-      // File was modified - restore original content
-      await webcontainer.fs.writeFile(relativePath, change.originalContent);
+      /* File was modified — restore original content */
+      await rt.fs.writeFile(relativePath, change.originalContent);
       logger.debug(`Restored original content: ${relativePath}`);
     }
 
@@ -1011,24 +1003,24 @@ export function isInPreviewMode(): boolean {
 }
 
 /**
- * Enter preview mode by temporarily applying pending changes to WebContainer.
+ * Enter preview mode by temporarily applying pending changes to the runtime filesystem.
  * This writes all pending files to the filesystem so the user can see the result.
  * Call exitPreviewMode() to restore original content.
  *
- * @param webcontainer - The WebContainer instance to write files to
+ * @param rt - The runtime instance to write files to
  * @returns Object with arrays of applied and failed file paths, plus requiresHardRefresh flag
  */
-export async function enterPreviewMode(webcontainer: {
+export async function enterPreviewMode(rt: {
   fs: {
     writeFile: (path: string, content: string) => Promise<void>;
-    mkdir: (path: string, options: { recursive: true }) => Promise<string>;
+    mkdir: (path: string, options: { recursive: true }) => Promise<void>;
   };
 }): Promise<{ applied: string[]; failed: Array<{ path: string; error: string }>; requiresHardRefresh: boolean }> {
   const state = stagingStore.get();
 
-  // Already in preview mode
   if (state.isPreviewMode) {
     logger.debug('Already in preview mode');
+
     return { applied: [], failed: [], requiresHardRefresh: false };
   }
 
@@ -1041,52 +1033,42 @@ export async function enterPreviewMode(webcontainer: {
 
   for (const change of pending) {
     try {
-      /*
-       * Convert absolute path to relative path for WebContainer
-       * Paths like "/home/project/src/file.ts" -> "src/file.ts"
-       */
+      /* Convert absolute path to relative path: "/home/project/src/file.ts" -> "src/file.ts" */
       const relativePath = change.filePath.replace(/^\/home\/project\/?/, '');
 
-      // DEBUG: Log the change details
       logger.info(`[PREVIEW DEBUG] Processing change: ${relativePath}`);
       logger.info(`[PREVIEW DEBUG] Change type: ${change.type}`);
       logger.info(`[PREVIEW DEBUG] Has newContent: ${!!change.newContent}`);
       logger.info(`[PREVIEW DEBUG] newContent length: ${change.newContent?.length ?? 0}`);
 
-      // Log first 200 chars of newContent to verify it's the expected content
       if (change.newContent) {
         const preview = change.newContent.substring(0, 200).replace(/\n/g, '\\n');
         logger.info(`[PREVIEW DEBUG] newContent preview: ${preview}...`);
       }
 
-      // Check if this is a config file that requires hard refresh
       if (isConfigFile(relativePath)) {
         requiresHardRefresh = true;
         logger.debug(`Preview: config file detected, will require hard refresh: ${relativePath}`);
       }
 
       if (change.type === 'delete') {
-        /*
-         * For deletions in preview, we don't actually delete - just skip
-         * The user will see the deletion effect when they accept
-         */
+        /* For deletions in preview, we don't actually delete — just skip */
         logger.debug(`Preview: skipping delete for ${relativePath} (preview only)`);
       } else {
-        // Create directory if needed
+        /* Create directory if needed */
         const pathParts = relativePath.split('/');
         const dir = pathParts.slice(0, -1).join('/');
 
         if (dir) {
           try {
-            await webcontainer.fs.mkdir(dir, { recursive: true });
+            await rt.fs.mkdir(dir, { recursive: true });
           } catch {
-            // Directory might already exist
+            /* Directory might already exist */
           }
         }
 
-        // Write the new content temporarily
-        logger.info(`[PREVIEW DEBUG] Writing file to WebContainer: ${relativePath}`);
-        await webcontainer.fs.writeFile(relativePath, change.newContent);
+        logger.info(`[PREVIEW DEBUG] Writing file: ${relativePath}`);
+        await rt.fs.writeFile(relativePath, change.newContent);
         logger.info(`[PREVIEW DEBUG] Successfully wrote file: ${relativePath}`);
       }
 
@@ -1098,7 +1080,6 @@ export async function enterPreviewMode(webcontainer: {
     }
   }
 
-  // Mark as preview mode
   stagingStore.setKey('isPreviewMode', true);
 
   logger.info(
@@ -1109,23 +1090,23 @@ export async function enterPreviewMode(webcontainer: {
 }
 
 /**
- * Exit preview mode by restoring original content to WebContainer.
+ * Exit preview mode by restoring original content to the runtime filesystem.
  * This reverts all pending changes back to their original state.
  *
- * @param webcontainer - The WebContainer instance to write files to
+ * @param rt - The runtime instance to write files to
  * @returns Object with arrays of restored and failed file paths
  */
-export async function exitPreviewMode(webcontainer: {
+export async function exitPreviewMode(rt: {
   fs: {
     writeFile: (path: string, content: string) => Promise<void>;
-    mkdir: (path: string, options: { recursive: true }) => Promise<string>;
+    mkdir: (path: string, options: { recursive: true }) => Promise<void>;
   };
 }): Promise<{ restored: string[]; failed: Array<{ path: string; error: string }> }> {
   const state = stagingStore.get();
 
-  // Not in preview mode
   if (!state.isPreviewMode) {
     logger.debug('Not in preview mode');
+
     return { restored: [], failed: [] };
   }
 
@@ -1141,18 +1122,14 @@ export async function exitPreviewMode(webcontainer: {
 
       if (change.type === 'create') {
         /*
-         * File was newly created - in preview we wrote it, now we should "undo"
-         * But since staging prevented the original write, the file shouldn't exist originally
-         * We need to delete it to restore the pre-change state
-         */
-        /*
-         * For now, skip delete operations in exit preview - they're complex
-         * The file will be properly handled when user accepts or rejects
+         * File was newly created — in preview we wrote it, now we should undo.
+         * Since staging prevented the original write, the file shouldn't exist originally.
+         * Skip delete operations in exit preview — handled when user accepts or rejects.
          */
         logger.debug(`Preview exit: skipping cleanup of new file ${relativePath}`);
       } else if (change.originalContent !== null) {
-        // Restore original content
-        await webcontainer.fs.writeFile(relativePath, change.originalContent);
+        /* Restore original content */
+        await rt.fs.writeFile(relativePath, change.originalContent);
         logger.debug(`Preview exit: restored ${relativePath}`);
       }
 
@@ -1164,7 +1141,6 @@ export async function exitPreviewMode(webcontainer: {
     }
   }
 
-  // Clear preview mode
   stagingStore.setKey('isPreviewMode', false);
 
   logger.info(`Exited preview mode: ${restored.length} files restored, ${failed.length} failed`);

@@ -1,9 +1,7 @@
 import { json } from '@remix-run/node';
+import { ApiError, externalFetch, handleApiError } from '~/lib/api/apiUtils';
 import { withSecurity } from '~/lib/security';
 import type { GitLabProjectInfo } from '~/types/GitLab';
-import { createScopedLogger } from '~/utils/logger';
-
-const logger = createScopedLogger('GitLabProjects');
 
 interface GitLabProject {
   id: number;
@@ -20,7 +18,7 @@ interface GitLabProject {
 }
 
 async function gitlabProjectsLoader({ request }: { request: Request }) {
-  try {
+  return handleApiError('GitLabProjects', async () => {
     const body = (await request.json()) as { token?: string; gitlabUrl?: string };
     const { token, gitlabUrl = 'https://gitlab.com' } = body;
 
@@ -28,15 +26,12 @@ async function gitlabProjectsLoader({ request }: { request: Request }) {
       return json({ error: 'GitLab token is required' }, { status: 400 });
     }
 
-    // Fetch user's projects from GitLab API
     const url = `${gitlabUrl}/api/v4/projects?membership=true&per_page=100&order_by=updated_at&sort=desc`;
 
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        Accept: 'application/json',
-        'User-Agent': 'devonz-app',
-      },
+    const response = await externalFetch({
+      url,
+      token,
+      headers: { Accept: 'application/json' },
     });
 
     if (!response.ok) {
@@ -45,19 +40,11 @@ async function gitlabProjectsLoader({ request }: { request: Request }) {
       }
 
       const errorText = await response.text().catch(() => 'Unknown error');
-      logger.error('GitLab API error:', response.status, errorText);
-
-      return json(
-        {
-          error: `GitLab API error: ${response.status}`,
-        },
-        { status: response.status },
-      );
+      throw new ApiError(`GitLab API error: ${response.status} – ${errorText}`, response.status);
     }
 
     const projects: GitLabProject[] = await response.json();
 
-    // Transform to our GitLabProjectInfo format
     const transformedProjects: GitLabProjectInfo[] = projects.map((project) => ({
       id: project.id,
       name: project.name,
@@ -75,34 +62,7 @@ async function gitlabProjectsLoader({ request }: { request: Request }) {
       projects: transformedProjects,
       total: transformedProjects.length,
     });
-  } catch (error) {
-    logger.error('Failed to fetch GitLab projects:', error);
-
-    if (error instanceof Error) {
-      if (error.message.includes('fetch')) {
-        return json(
-          {
-            error: 'Failed to connect to GitLab. Please check your network connection.',
-          },
-          { status: 503 },
-        );
-      }
-
-      return json(
-        {
-          error: `Failed to fetch projects: ${error.message}`,
-        },
-        { status: 500 },
-      );
-    }
-
-    return json(
-      {
-        error: 'An unexpected error occurred while fetching projects',
-      },
-      { status: 500 },
-    );
-  }
+  });
 }
 
 export const action = withSecurity(gitlabProjectsLoader);

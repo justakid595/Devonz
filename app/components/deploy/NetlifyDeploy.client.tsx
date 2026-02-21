@@ -2,7 +2,7 @@ import { toast } from 'react-toastify';
 import { useStore } from '@nanostores/react';
 import { netlifyConnection } from '~/lib/stores/netlify';
 import { workbenchStore } from '~/lib/stores/workbench';
-import { webcontainer } from '~/lib/webcontainer';
+import { runtime } from '~/lib/runtime';
 import { path } from '~/utils/path';
 import { useState } from 'react';
 import type { ActionCallbackData } from '~/lib/runtime/message-parser';
@@ -85,7 +85,7 @@ export function useNetlifyDeploy() {
       deployArtifact.runner.handleDeployAction('deploying', 'running', { source: 'netlify' });
 
       // Get the build files
-      const container = await webcontainer;
+      const container = await runtime;
 
       // Remove /home/project from buildPath if it exists
       const buildPath = buildOutput.path.replace('/home/project', '');
@@ -121,18 +121,18 @@ export function useNetlifyDeploy() {
 
       async function getAllFiles(dirPath: string): Promise<Record<string, string>> {
         const files: Record<string, string> = {};
-        const entries = await container.fs.readdir(dirPath, { withFileTypes: true });
+        const entries = await container.fs.readdir(dirPath);
 
         for (const entry of entries) {
           const fullPath = path.join(dirPath, entry.name);
 
-          if (entry.isFile()) {
-            const content = await container.fs.readFile(fullPath, 'utf-8');
+          if (entry.isFile) {
+            const content = await container.fs.readFile(fullPath);
 
             // Remove build path prefix from the path
             const deployPath = fullPath.replace(finalBuildPath, '');
             files[deployPath] = content;
-          } else if (entry.isDirectory()) {
+          } else if (entry.isDirectory) {
             const subFiles = await getAllFiles(fullPath);
             Object.assign(files, subFiles);
           }

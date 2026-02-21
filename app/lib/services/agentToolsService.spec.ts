@@ -26,9 +26,9 @@ const mockRm = vi.fn();
 const mockExecuteCommand = vi.fn();
 const mockShellReady = vi.fn();
 
-// Mock the webcontainer module
-vi.mock('~/lib/webcontainer', () => ({
-  webcontainer: Promise.resolve({
+/* Mock the runtime module */
+vi.mock('~/lib/runtime', () => ({
+  runtime: Promise.resolve({
     fs: {
       readFile: (...args: unknown[]) => mockReadFile(...args),
       writeFile: (...args: unknown[]) => mockWriteFile(...args),
@@ -550,9 +550,7 @@ describe('devonz_delete_file', () => {
 
   it('should fail to delete non-empty directory without recursive flag', async () => {
     // readdir succeeds with items (non-empty directory)
-    mockReaddir.mockResolvedValue([
-      { name: 'file1.ts', isDirectory: () => false },
-    ]);
+    mockReaddir.mockResolvedValue([{ name: 'file1.ts', isDirectory: () => false }]);
 
     const result = await deleteFileTool.execute({ path: '/src/components' });
 
@@ -564,6 +562,7 @@ describe('devonz_delete_file', () => {
   it('should return error for non-existent file', async () => {
     // readdir throws (not a directory)
     mockReaddir.mockRejectedValue(new Error('ENOENT'));
+
     // rm also throws (file doesn't exist)
     mockRm.mockRejectedValue(new Error('ENOENT: no such file or directory'));
 

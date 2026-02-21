@@ -8,7 +8,7 @@ import { Chat } from '~/components/chat/Chat.client';
 import { useGit } from '~/lib/hooks/useGit';
 import { useChatHistory } from '~/lib/persistence';
 import { createCommandsMessage, detectProjectCommands, escapeDevonzTags } from '~/utils/projectCommands';
-import { cleanPackageJsonForWebContainer, replaceUnsupportedFonts } from '~/utils/packageJsonCleaner';
+import { cleanPackageJson } from '~/utils/packageJsonCleaner';
 import { LoadingOverlay } from '~/components/ui/LoadingOverlay';
 import { toast } from 'react-toastify';
 import { createScopedLogger } from '~/utils/logger';
@@ -79,34 +79,19 @@ export function GitUrlImport() {
             })
             .filter((f) => f.content);
 
-          // Clean package.json for WebContainer compatibility
+          /* Clean package.json — remove incompatible dependencies */
           const packageJsonIndex = fileContents.findIndex((f) => f.path === 'package.json');
 
           if (packageJsonIndex !== -1) {
             const allPaths = fileContents.map((f) => f.path);
-            const cleanResult = cleanPackageJsonForWebContainer(fileContents[packageJsonIndex].content, allPaths);
+            const cleanResult = cleanPackageJson(fileContents[packageJsonIndex].content, allPaths);
 
             if (cleanResult.cleaned) {
               fileContents[packageJsonIndex] = {
                 ...fileContents[packageJsonIndex],
                 content: cleanResult.content,
               };
-              logger.info('Cleaned package.json for WebContainer:', cleanResult.removedDeps);
-            }
-
-            /*
-             * When Next.js is capped to 14.x, fonts like Geist/Geist_Mono
-             * (added in 15+) break the build. Replace them in layout files.
-             */
-            if (cleanResult.removedDeps.some((d) => d.includes('next version capped'))) {
-              for (let i = 0; i < fileContents.length; i++) {
-                const fontResult = replaceUnsupportedFonts(fileContents[i].content);
-
-                if (fontResult.replaced) {
-                  fileContents[i] = { ...fileContents[i], content: fontResult.content };
-                  logger.info(`Replaced unsupported fonts in ${fileContents[i].path}`);
-                }
-              }
+              logger.info('Cleaned package.json:', cleanResult.removedDeps);
             }
           }
 

@@ -1,0 +1,268 @@
+/**
+ * @route /api/runtime/fs
+ * Server-side API route for filesystem operations.
+ *
+ * GET operations: readFile, readFileRaw, readdir, stat, exists, watch (SSE)
+ * POST operations: writeFile, mkdir, rm, rename
+ *
+ * All paths are relative to the project directory. Path traversal is
+ * validated on both client and server sides.
+ */
+
+import type { ActionFunctionArgs, LoaderFunctionArgs } from '@remix-run/node';
+import { json } from '@remix-run/node';
+import { Buffer } from 'node:buffer';
+import { RuntimeManager } from '~/lib/runtime/local-runtime';
+import { isValidProjectId, isSafePath } from '~/lib/runtime/runtime-provider';
+import { withSecurity } from '~/lib/security';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('RuntimeFS');
+
+/*
+ * ---------------------------------------------------------------------------
+ * GET — Read operations
+ * ---------------------------------------------------------------------------
+ */
+
+async function fsLoader({ request }: LoaderFunctionArgs) {
+  const url = new URL(request.url);
+  const op = url.searchParams.get('op');
+  const projectId = url.searchParams.get('projectId');
+  const filePath = url.searchParams.get('path') ?? '.';
+
+  if (!projectId || !isValidProjectId(projectId)) {
+    return json({ error: 'Invalid or missing projectId' }, { status: 400 });
+  }
+
+  if (!isSafePath(filePath)) {
+    return json({ error: 'Invalid path: traversal detected' }, { status: 400 });
+  }
+
+  const manager = RuntimeManager.getInstance();
+  const runtime = await manager.getRuntime(projectId);
+
+  switch (op) {
+    case 'readFile': {
+      try {
+        const encoding = (url.searchParams.get('encoding') ?? 'utf-8') as BufferEncoding;
+        const content = await runtime.fs.readFile(filePath, encoding);
+
+        return new Response(content, {
+          headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Read failed';
+        logger.error(`readFile failed: ${filePath}`, error);
+
+        return json({ error: message }, { status: 404 });
+      }
+    }
+
+    case 'readFileRaw': {
+      try {
+        const data = await runtime.fs.readFileRaw(filePath);
+
+        return new Response(Buffer.from(data), {
+          headers: { 'Content-Type': 'application/octet-stream' },
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Read failed';
+        logger.error(`readFileRaw failed: ${filePath}`, error);
+
+        return json({ error: message }, { status: 404 });
+      }
+    }
+
+    case 'readdir': {
+      try {
+        const entries = await runtime.fs.readdir(filePath);
+        return json(entries);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Readdir failed';
+        logger.error(`readdir failed: ${filePath}`, error);
+
+        return json({ error: message }, { status: 404 });
+      }
+    }
+
+    case 'stat': {
+      try {
+        const stat = await runtime.fs.stat(filePath);
+        return json(stat);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Stat failed';
+        logger.error(`stat failed: ${filePath}`, error);
+
+        return json({ error: message }, { status: 404 });
+      }
+    }
+
+    case 'exists': {
+      const exists = await runtime.fs.exists(filePath);
+      return json({ exists });
+    }
+
+    case 'watch': {
+      const glob = url.searchParams.get('glob') ?? '**/*';
+
+      // SSE stream for file watch events
+      const stream = new ReadableStream({
+        start(controller) {
+          const encoder = new TextEncoder();
+
+          const dispose = runtime.fs.watch(glob, (events) => {
+            try {
+              const data = `data: ${JSON.stringify(events)}\n\n`;
+              controller.enqueue(encoder.encode(data));
+            } catch {
+              // Stream may have been closed
+            }
+          });
+
+          // Send initial heartbeat
+          controller.enqueue(encoder.encode('data: []\n\n'));
+
+          // Clean up when client disconnects
+          request.signal.addEventListener('abort', () => {
+            dispose();
+            controller.close();
+          });
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        },
+      });
+    }
+
+    default: {
+      return json({ error: `Unknown operation: ${op}` }, { status: 400 });
+    }
+  }
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * POST — Write operations
+ * ---------------------------------------------------------------------------
+ */
+
+async function fsAction({ request }: ActionFunctionArgs) {
+  const body = await request.json();
+  const { projectId, op } = body;
+
+  if (!projectId || !isValidProjectId(projectId)) {
+    return json({ error: 'Invalid or missing projectId' }, { status: 400 });
+  }
+
+  const manager = RuntimeManager.getInstance();
+  const runtime = await manager.getRuntime(projectId);
+
+  switch (op ?? 'writeFile') {
+    case 'writeFile': {
+      const { path: filePath, content, binary } = body;
+
+      if (!filePath || !isSafePath(filePath)) {
+        return json({ error: 'Invalid path' }, { status: 400 });
+      }
+
+      try {
+        if (binary) {
+          // Decode base64 to binary
+          const binaryStr = atob(content);
+          const bytes = new Uint8Array(binaryStr.length);
+
+          for (let i = 0; i < binaryStr.length; i++) {
+            bytes[i] = binaryStr.charCodeAt(i);
+          }
+
+          await runtime.fs.writeFile(filePath, bytes);
+        } else {
+          await runtime.fs.writeFile(filePath, content);
+        }
+
+        return json({ success: true });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Write failed';
+        logger.error(`writeFile failed: ${filePath}`, error);
+
+        return json({ error: message }, { status: 500 });
+      }
+    }
+
+    case 'mkdir': {
+      const { path: dirPath, recursive } = body;
+
+      if (!dirPath || !isSafePath(dirPath)) {
+        return json({ error: 'Invalid path' }, { status: 400 });
+      }
+
+      try {
+        await runtime.fs.mkdir(dirPath, { recursive: recursive ?? false });
+        return json({ success: true });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Mkdir failed';
+        logger.error(`mkdir failed: ${dirPath}`, error);
+
+        return json({ error: message }, { status: 500 });
+      }
+    }
+
+    case 'rm': {
+      const { path: rmPath, recursive, force } = body;
+
+      if (!rmPath || !isSafePath(rmPath)) {
+        return json({ error: 'Invalid path' }, { status: 400 });
+      }
+
+      try {
+        await runtime.fs.rm(rmPath, {
+          recursive: recursive ?? false,
+          force: force ?? false,
+        });
+        return json({ success: true });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Remove failed';
+        logger.error(`rm failed: ${rmPath}`, error);
+
+        return json({ error: message }, { status: 500 });
+      }
+    }
+
+    case 'rename': {
+      const { oldPath, newPath } = body;
+
+      if (!oldPath || !isSafePath(oldPath) || !newPath || !isSafePath(newPath)) {
+        return json({ error: 'Invalid path(s)' }, { status: 400 });
+      }
+
+      try {
+        await runtime.fs.rename(oldPath, newPath);
+        return json({ success: true });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Rename failed';
+        logger.error(`rename failed: ${oldPath} → ${newPath}`, error);
+
+        return json({ error: message }, { status: 500 });
+      }
+    }
+
+    default: {
+      return json({ error: `Unknown operation: ${op}` }, { status: 400 });
+    }
+  }
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * Exports (wrapped with security middleware)
+ * ---------------------------------------------------------------------------
+ */
+
+export const loader = withSecurity(fsLoader, { rateLimit: false });
+export const action = withSecurity(fsAction, { rateLimit: false });

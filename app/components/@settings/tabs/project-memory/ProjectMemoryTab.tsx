@@ -1,12 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { useStore } from '@nanostores/react';
-import { workbenchStore } from '~/lib/stores/workbench';
-import { webcontainer } from '~/lib/webcontainer';
+import { runtime } from '~/lib/runtime';
 import { classNames } from '~/utils/classNames';
 import { toast } from 'react-toastify';
-import type { FileMap } from '~/lib/stores/files';
 import { createScopedLogger } from '~/utils/logger';
+import { useFileContent } from '~/lib/hooks/useFileContent';
 
 const logger = createScopedLogger('ProjectMemory');
 
@@ -32,24 +30,21 @@ This file contains persistent instructions for the AI. The AI will read this fil
 `;
 
 export default function ProjectMemoryTab() {
-  const files = useStore(workbenchStore.files) as FileMap;
+  const fileContent = useFileContent(PROJECT_MEMORY_PATH);
   const [content, setContent] = useState('');
   const [originalContent, setOriginalContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
-  // Check if PROJECT.md exists and load its content
   useEffect(() => {
-    const file = files[PROJECT_MEMORY_PATH];
-
-    if (file?.type === 'file' && typeof file.content === 'string') {
-      setContent(file.content);
-      setOriginalContent(file.content);
+    if (typeof fileContent === 'string') {
+      setContent(fileContent);
+      setOriginalContent(fileContent);
     } else {
       setContent('');
       setOriginalContent('');
     }
-  }, [files]);
+  }, [fileContent]);
 
   // Track unsaved changes
   useEffect(() => {
@@ -65,9 +60,9 @@ export default function ProjectMemoryTab() {
     setIsSaving(true);
 
     try {
-      // Write directly to WebContainer filesystem
-      const wc = await webcontainer;
-      await wc.fs.writeFile(RELATIVE_PATH, content);
+      /* Write directly to runtime filesystem */
+      const rt = await runtime;
+      await rt.fs.writeFile(RELATIVE_PATH, content);
 
       // Update the files store to reflect the change
       workbenchStore.files.setKey(PROJECT_MEMORY_PATH, {

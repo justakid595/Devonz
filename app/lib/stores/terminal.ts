@@ -1,4 +1,4 @@
-import type { WebContainer, WebContainerProcess } from '@webcontainer/api';
+import type { RuntimeProvider, SpawnedProcess } from '~/lib/runtime/runtime-provider';
 import { atom, type WritableAtom } from 'nanostores';
 import type { ITerminal } from '~/types/terminal';
 import { newDevonzShellProcess, newShellProcess } from '~/utils/shell';
@@ -8,19 +8,20 @@ import { createScopedLogger } from '~/utils/logger';
 const logger = createScopedLogger('TerminalStore');
 
 export class TerminalStore {
-  #webcontainer: Promise<WebContainer>;
-  #terminals: Array<{ terminal: ITerminal; process: WebContainerProcess }> = [];
+  #runtime: Promise<RuntimeProvider>;
+  #terminals: Array<{ terminal: ITerminal; process: SpawnedProcess }> = [];
   #devonzTerminal = newDevonzShellProcess();
 
   showTerminal: WritableAtom<boolean> = import.meta.hot?.data.showTerminal ?? atom(true);
 
-  constructor(webcontainerPromise: Promise<WebContainer>) {
-    this.#webcontainer = webcontainerPromise;
+  constructor(runtimePromise: Promise<RuntimeProvider>) {
+    this.#runtime = runtimePromise;
 
     if (import.meta.hot) {
       import.meta.hot.data.showTerminal = this.showTerminal;
     }
   }
+
   get devonzTerminal() {
     return this.#devonzTerminal;
   }
@@ -28,41 +29,44 @@ export class TerminalStore {
   toggleTerminal(value?: boolean) {
     this.showTerminal.set(value !== undefined ? value : !this.showTerminal.get());
   }
+
   async attachDevonzTerminal(terminal: ITerminal) {
     try {
-      const wc = await this.#webcontainer;
+      const runtime = await this.#runtime;
 
-      if (!wc) {
-        terminal.write(coloredText.red('WebContainer not available\n'));
+      if (!runtime) {
+        terminal.write(coloredText.red('Runtime not available\n'));
 
         return;
       }
 
-      await this.#devonzTerminal.init(wc, terminal);
+      await this.#devonzTerminal.init(runtime, terminal);
     } catch (error: unknown) {
       terminal.write(
         coloredText.red('Failed to spawn devonz shell\n\n') + (error instanceof Error ? error.message : String(error)),
       );
+
       return;
     }
   }
 
   async attachTerminal(terminal: ITerminal) {
     try {
-      const wc = await this.#webcontainer;
+      const runtime = await this.#runtime;
 
-      if (!wc) {
-        terminal.write(coloredText.red('WebContainer not available\n'));
+      if (!runtime) {
+        terminal.write(coloredText.red('Runtime not available\n'));
 
         return;
       }
 
-      const shellProcess = await newShellProcess(wc, terminal);
+      const shellProcess = await newShellProcess(runtime, terminal);
       this.#terminals.push({ terminal, process: shellProcess });
     } catch (error: unknown) {
       terminal.write(
         coloredText.red('Failed to spawn shell\n\n') + (error instanceof Error ? error.message : String(error)),
       );
+
       return;
     }
   }
@@ -84,6 +88,7 @@ export class TerminalStore {
       } catch (error) {
         logger.warn('Failed to kill terminal process:', error);
       }
+
       this.#terminals.splice(terminalIndex, 1);
     }
   }

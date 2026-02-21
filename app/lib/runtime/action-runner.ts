@@ -1,4 +1,4 @@
-import type { WebContainer } from '@webcontainer/api';
+import type { RuntimeProvider, DirEntry } from './runtime-provider';
 import { path as nodePath } from '~/utils/path';
 import { atom, map, type MapStore } from 'nanostores';
 import type {
@@ -95,7 +95,7 @@ class ActionCommandError extends Error {
 }
 
 export class ActionRunner {
-  #webcontainer: Promise<WebContainer>;
+  #runtime: Promise<RuntimeProvider>;
   #currentExecutionPromise: Promise<void> = Promise.resolve();
   #shellTerminal: () => DevonzShell;
   runnerId = atom<string>(`${Date.now()}`);
@@ -107,14 +107,14 @@ export class ActionRunner {
   buildOutput?: { path: string; exitCode: number; output: string };
 
   constructor(
-    webcontainerPromise: Promise<WebContainer>,
+    runtimePromise: Promise<RuntimeProvider>,
     getShellTerminal: () => DevonzShell,
     onAlert?: (alert: ActionAlert) => void,
     onSupabaseAlert?: (alert: SupabaseAlert) => void,
     onDeployAlert?: (alert: DeployAlert) => void,
     onClearAlert?: () => void,
   ) {
-    this.#webcontainer = webcontainerPromise;
+    this.#runtime = runtimePromise;
     this.#shellTerminal = getShellTerminal;
     this.onAlert = onAlert;
     this.onClearAlert = onClearAlert;
@@ -344,7 +344,7 @@ export class ActionRunner {
       return;
     }
 
-    // Rewrite unsupported runtime commands (e.g. Python → Node.js) for WebContainer
+    // Rewrite unsupported runtime commands (e.g. Python → Node.js)
     const rewriteResult = rewriteUnsupportedCommand(action.content);
 
     if (rewriteResult.wasRewritten) {
@@ -429,7 +429,7 @@ export class ActionRunner {
       return undefined;
     }
 
-    // Rewrite unsupported runtime commands for WebContainer
+    // Rewrite unsupported runtime commands
     const startRewrite = rewriteUnsupportedCommand(action.content);
 
     if (startRewrite.wasRewritten) {
@@ -523,8 +523,8 @@ export class ActionRunner {
       unreachable('Expected file action');
     }
 
-    const webcontainer = await this.#webcontainer;
-    const relativePath = nodePath.relative(webcontainer.workdir, action.filePath);
+    const runtime = await this.#runtime;
+    const relativePath = nodePath.relative(runtime.workdir, action.filePath);
 
     // Check if staging is enabled and if this file should be staged
     const stagingState = stagingStore.get();
@@ -536,7 +536,7 @@ export class ActionRunner {
       let changeType: ChangeType = 'create';
 
       try {
-        originalContent = await webcontainer.fs.readFile(relativePath, 'utf-8');
+        originalContent = await runtime.fs.readFile(relativePath, 'utf-8');
         changeType = 'modify';
       } catch {
         // File doesn't exist, this is a create
@@ -560,7 +560,7 @@ export class ActionRunner {
     }
 
     // Direct write path (staging disabled or auto-approved)
-    await this.#writeFileDirect(action, webcontainer, relativePath);
+    await this.#writeFileDirect(action, runtime, relativePath);
   }
 
   /**
@@ -577,9 +577,9 @@ export class ActionRunner {
   }
 
   /**
-   * Write file directly to WebContainer (used when staging is bypassed)
+   * Write file directly to the runtime (used when staging is bypassed)
    */
-  async #writeFileDirect(action: ActionState | FileWriteInput, webcontainer: WebContainer, relativePath: string) {
+  async #writeFileDirect(action: ActionState | FileWriteInput, runtime: RuntimeProvider, relativePath: string) {
     if (action.type !== 'file') {
       unreachable('Expected file action');
     }
@@ -591,7 +591,7 @@ export class ActionRunner {
 
     if (folder !== '.') {
       try {
-        await webcontainer.fs.mkdir(folder, { recursive: true });
+        await runtime.fs.mkdir(folder, { recursive: true });
         logger.debug('Created folder', folder);
       } catch (error) {
         logger.error('Failed to create folder\n\n', error);
@@ -619,17 +619,17 @@ export class ActionRunner {
       if (relativePath === 'package.json') {
         // Snapshot existing deps BEFORE merge so we can detect new additions
         try {
-          const existingContent = await webcontainer.fs.readFile(relativePath, 'utf-8');
+          const existingContent = await runtime.fs.readFile(relativePath, 'utf-8');
           const existingPkg = JSON.parse(existingContent);
           oldDepsSnapshot = { ...(existingPkg.dependencies || {}), ...(existingPkg.devDependencies || {}) };
         } catch {
           // File doesn't exist yet — first write, npm install will run naturally
         }
 
-        contentToWrite = await this.#mergePackageJsonDeps(webcontainer, relativePath, action.content);
+        contentToWrite = await this.#mergePackageJsonDeps(runtime, relativePath, action.content);
       }
 
-      await webcontainer.fs.writeFile(relativePath, contentToWrite);
+      await runtime.fs.writeFile(relativePath, contentToWrite);
       logger.debug(`File written ${relativePath}`);
 
       /*
@@ -650,7 +650,9 @@ export class ActionRunner {
 
             const shell = this.#shellTerminal();
             await shell.ready();
-            await shell.executeCommand(this.runnerId.get(), 'npm install --legacy-peer-deps', () => {});
+            await shell.executeCommand(this.runnerId.get(), 'npm install --legacy-peer-deps', () => {
+              /* no-op: auto-install doesn't need abort */
+            });
             logger.info('npm install completed after package.json update');
           }
         } catch (installError) {
@@ -716,7 +718,7 @@ export class ActionRunner {
   /**
    * Pre-start dependency validator.
    *
-   * Scans all source files (.ts, .tsx, .js, .jsx) in the WebContainer
+   * Scans all source files (.ts, .tsx, .js, .jsx) in the project
    * for npm package imports and cross-references them against the
    * dependencies listed in package.json. If any packages are imported
    * but NOT listed in package.json, they are injected and `npm install`
@@ -728,13 +730,13 @@ export class ActionRunner {
    */
   async #validateAndInstallMissingDeps(): Promise<void> {
     try {
-      const webcontainer = await this.#webcontainer;
+      const runtime = await this.#runtime;
 
       // Step 1: Read and parse package.json
       let pkgContent: string;
 
       try {
-        pkgContent = await webcontainer.fs.readFile('package.json', 'utf-8');
+        pkgContent = await runtime.fs.readFile('package.json', 'utf-8');
       } catch {
         logger.debug('No package.json found, skipping dependency validation');
         return;
@@ -775,10 +777,10 @@ export class ActionRunner {
           return;
         }
 
-        let entries: Awaited<ReturnType<typeof webcontainer.fs.readdir>>;
+        let entries: DirEntry[];
 
         try {
-          entries = await webcontainer.fs.readdir(dirPath, { withFileTypes: true });
+          entries = await runtime.fs.readdir(dirPath);
         } catch {
           return; // Directory doesn't exist or can't be read
         }
@@ -786,7 +788,7 @@ export class ActionRunner {
         for (const entry of entries) {
           const fullPath = dirPath === '.' ? entry.name : `${dirPath}/${entry.name}`;
 
-          if (entry.isDirectory()) {
+          if (entry.isDirectory) {
             // Skip directories that never contain project source
             const skipDirs = ['node_modules', '.git', 'dist', 'build', '.next', '.cache', '.vite', 'coverage'];
 
@@ -795,7 +797,7 @@ export class ActionRunner {
             }
           } else if (sourceExtensions.some((ext) => entry.name.endsWith(ext))) {
             try {
-              const content = await webcontainer.fs.readFile(fullPath, 'utf-8');
+              const content = await runtime.fs.readFile(fullPath, 'utf-8');
               let match;
 
               // Reset lastIndex for each file
@@ -837,12 +839,12 @@ export class ActionRunner {
 
       // Also scan root-level source files (e.g. vite.config.ts, tailwind.config.ts)
       try {
-        const rootEntries = await webcontainer.fs.readdir('.', { withFileTypes: true });
+        const rootEntries = await runtime.fs.readdir('.');
 
         for (const entry of rootEntries) {
-          if (!entry.isDirectory() && sourceExtensions.some((ext) => entry.name.endsWith(ext))) {
+          if (!entry.isDirectory && sourceExtensions.some((ext) => entry.name.endsWith(ext))) {
             try {
-              const content = await webcontainer.fs.readFile(entry.name, 'utf-8');
+              const content = await runtime.fs.readFile(entry.name, 'utf-8');
               let match;
               importRegex.lastIndex = 0;
 
@@ -886,7 +888,7 @@ export class ActionRunner {
 
         pkgJson.dependencies = deps;
 
-        await webcontainer.fs.writeFile('package.json', JSON.stringify(pkgJson, null, 2));
+        await runtime.fs.writeFile('package.json', JSON.stringify(pkgJson, null, 2));
         logger.info('Updated package.json with missing dependencies');
 
         // Run npm install to fetch the newly added packages
@@ -923,7 +925,7 @@ export class ActionRunner {
    */
   async #validateComponentImports(): Promise<void> {
     try {
-      const webcontainer = await this.#webcontainer;
+      const runtime = await this.#runtime;
 
       // Common shadcn/ui components and their import paths
       const SHADCN_COMPONENTS: Record<string, string[]> = {
@@ -1023,10 +1025,10 @@ export class ActionRunner {
           return;
         }
 
-        let entries: Awaited<ReturnType<typeof webcontainer.fs.readdir>>;
+        let entries: DirEntry[];
 
         try {
-          entries = await webcontainer.fs.readdir(dirPath, { withFileTypes: true });
+          entries = await runtime.fs.readdir(dirPath);
         } catch {
           return;
         }
@@ -1034,7 +1036,7 @@ export class ActionRunner {
         for (const entry of entries) {
           const fullPath = dirPath === '.' ? entry.name : `${dirPath}/${entry.name}`;
 
-          if (entry.isDirectory()) {
+          if (entry.isDirectory) {
             const skipDirs = ['node_modules', '.git', 'dist', 'build', '.next', '.cache', '.vite', 'coverage'];
 
             if (!skipDirs.includes(entry.name)) {
@@ -1042,7 +1044,7 @@ export class ActionRunner {
             }
           } else if (sourceExtensions.some((ext) => entry.name.endsWith(ext))) {
             try {
-              let content = await webcontainer.fs.readFile(fullPath, 'utf-8');
+              let content = await runtime.fs.readFile(fullPath, 'utf-8');
 
               // Extract all existing imports (what's already imported)
               const importedNames = new Set<string>();
@@ -1137,7 +1139,7 @@ export class ActionRunner {
                   }
                 }
 
-                await webcontainer.fs.writeFile(fullPath, content);
+                await runtime.fs.writeFile(fullPath, content);
                 logger.info(
                   `Import validator: Auto-injected ${usedComponents.size} missing import(s) in ${fullPath}: ${[...usedComponents].join(', ')}`,
                 );
@@ -1168,9 +1170,9 @@ export class ActionRunner {
    * This prevents the LLM from accidentally dropping template dependencies
    * when it rewrites package.json from scratch.
    */
-  async #mergePackageJsonDeps(webcontainer: WebContainer, relativePath: string, newContent: string): Promise<string> {
+  async #mergePackageJsonDeps(runtime: RuntimeProvider, relativePath: string, newContent: string): Promise<string> {
     try {
-      const existingContent = await webcontainer.fs.readFile(relativePath, 'utf-8');
+      const existingContent = await runtime.fs.readFile(relativePath, 'utf-8');
       const existingPkg = JSON.parse(existingContent);
       const newPkg = JSON.parse(newContent);
 
@@ -1202,8 +1204,10 @@ export class ActionRunner {
         return merged;
       }
     } catch (error) {
-      // File doesn't exist yet — use new content as-is
-      // But warn if it's a parse error (not a file-not-found)
+      /*
+       * File doesn't exist yet — use new content as-is.
+       * Warn if it's a parse error (not a file-not-found).
+       */
       if (error instanceof SyntaxError) {
         logger.warn('Failed to parse existing package.json during merge — using new content as-is:', error.message);
       }
@@ -1218,17 +1222,17 @@ export class ActionRunner {
    */
   async applyAcceptedChange(filePath: string, content: string): Promise<boolean> {
     try {
-      const webcontainer = await this.#webcontainer;
-      const relativePath = nodePath.relative(webcontainer.workdir, filePath);
+      const runtime = await this.#runtime;
+      const relativePath = nodePath.relative(runtime.workdir, filePath);
 
       let folder = nodePath.dirname(relativePath);
       folder = folder.replace(/\/+$/g, '');
 
       if (folder !== '.') {
-        await webcontainer.fs.mkdir(folder, { recursive: true });
+        await runtime.fs.mkdir(folder, { recursive: true });
       }
 
-      await webcontainer.fs.writeFile(relativePath, content);
+      await runtime.fs.writeFile(relativePath, content);
       logger.info(`Accepted change applied: ${relativePath}`);
 
       return true;
@@ -1244,10 +1248,10 @@ export class ActionRunner {
    */
   async deleteFile(filePath: string): Promise<boolean> {
     try {
-      const webcontainer = await this.#webcontainer;
-      const relativePath = nodePath.relative(webcontainer.workdir, filePath);
+      const runtime = await this.#runtime;
+      const relativePath = nodePath.relative(runtime.workdir, filePath);
 
-      await webcontainer.fs.rm(relativePath);
+      await runtime.fs.rm(relativePath);
       logger.info(`File deleted: ${relativePath}`);
 
       return true;
@@ -1266,9 +1270,9 @@ export class ActionRunner {
 
   async getFileHistory(filePath: string): Promise<FileHistory | null> {
     try {
-      const webcontainer = await this.#webcontainer;
+      const runtime = await this.#runtime;
       const historyPath = this.#getHistoryPath(filePath);
-      const content = await webcontainer.fs.readFile(historyPath, 'utf-8');
+      const content = await runtime.fs.readFile(historyPath, 'utf-8');
 
       return JSON.parse(content);
     } catch (error) {
@@ -1278,7 +1282,7 @@ export class ActionRunner {
   }
 
   async saveFileHistory(filePath: string, history: FileHistory) {
-    // const webcontainer = await this.#webcontainer;
+    // const runtime = await this.#runtime;
     const historyPath = this.#getHistoryPath(filePath);
 
     await this.#runFileAction({
@@ -1308,24 +1312,22 @@ export class ActionRunner {
       source: 'netlify',
     });
 
-    const webcontainer = await this.#webcontainer;
+    const runtime = await this.#runtime;
 
-    // Create a new terminal specifically for the build
-    const buildProcess = await webcontainer.spawn('npm', ['run', 'build']);
+    /*
+     * Spawn the build command via the runtime provider.
+     * RuntimeProvider.spawn returns a SpawnedProcess with onData/onExit
+     * instead of WebContainer's ReadableStream-based .output/.exit pattern.
+     */
+    const buildProcess = await runtime.spawn('npm', ['run', 'build']);
 
     let output = '';
-    const outputPromise = buildProcess.output.pipeTo(
-      new WritableStream({
-        write(data) {
-          output += data;
-        },
-      }),
-    );
-
-    const exitCode = await buildProcess.exit;
-    await outputPromise.catch(() => {
-      logger.warn('Build output stream interrupted — output may be incomplete');
+    const disposeData = buildProcess.onData((data) => {
+      output += data;
     });
+
+    const exitCode = await buildProcess.onExit;
+    disposeData();
 
     let buildDir = '';
 
@@ -1369,10 +1371,10 @@ export class ActionRunner {
 
     // Try to find the first existing build directory
     for (const dir of commonBuildDirs) {
-      const dirPath = nodePath.join(webcontainer.workdir, dir);
+      const dirPath = nodePath.join(runtime.workdir, dir);
 
       try {
-        await webcontainer.fs.readdir(dirPath);
+        await runtime.fs.readdir(dirPath);
         buildDir = dirPath;
         break;
       } catch {
@@ -1382,7 +1384,7 @@ export class ActionRunner {
 
     // If no build directory was found, use the default (dist)
     if (!buildDir) {
-      buildDir = nodePath.join(webcontainer.workdir, 'dist');
+      buildDir = nodePath.join(runtime.workdir, 'dist');
     }
 
     return {
@@ -1575,9 +1577,9 @@ export class ActionRunner {
       if (rmMatch) {
         const filePaths = rmMatch[1].split(/\s+/);
 
-        // Check if any of the files exist using WebContainer
+        // Check if any of the files exist using the runtime
         try {
-          const webcontainer = await this.#webcontainer;
+          const runtime = await this.#runtime;
           const existingFiles = [];
 
           for (const filePath of filePaths) {
@@ -1586,7 +1588,7 @@ export class ActionRunner {
             } // Skip flags
 
             try {
-              await webcontainer.fs.readFile(filePath);
+              await runtime.fs.readFile(filePath);
               existingFiles.push(filePath);
             } catch {
               // File doesn't exist, skip it
@@ -1622,8 +1624,8 @@ export class ActionRunner {
         const targetDir = cdMatch[1].trim();
 
         try {
-          const webcontainer = await this.#webcontainer;
-          await webcontainer.fs.readdir(targetDir);
+          const runtime = await this.#runtime;
+          await runtime.fs.readdir(targetDir);
         } catch {
           return {
             shouldModify: true,
@@ -1642,8 +1644,8 @@ export class ActionRunner {
         const sourceFile = parts[1];
 
         try {
-          const webcontainer = await this.#webcontainer;
-          await webcontainer.fs.readFile(sourceFile);
+          const runtime = await this.#runtime;
+          await runtime.fs.readFile(sourceFile);
         } catch {
           return {
             shouldModify: false,
@@ -1703,7 +1705,7 @@ export class ActionRunner {
         pattern: /command not found/,
         title: 'Command Not Found',
         getMessage: () =>
-          `The command '${firstWord}' is not available in WebContainer.\n\nSuggestion: Check available commands or use a package manager to install it.`,
+          `The command '${firstWord}' is not available.\n\nSuggestion: Check available commands or use a package manager to install it.`,
       },
       {
         pattern: /Is a directory/,

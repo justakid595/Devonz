@@ -1,0 +1,557 @@
+/**
+ * @module runtime-client
+ * Client-side implementation of {@link RuntimeProvider} that proxies all
+ * operations to the server via HTTP API routes.
+ *
+ * This replaces the WebContainer singleton in the browser. Stores and
+ * components that previously imported `webcontainer` will import `runtime`
+ * instead and get this client proxy.
+ *
+ * @remarks BROWSER-ONLY — this code runs in the client bundle.
+ *
+ * Communication pattern:
+ * - File operations: POST/GET to `/api/runtime/fs`
+ * - Command execution: POST to `/api/runtime/exec`
+ * - Terminal sessions: POST for spawn/write/kill, SSE for streaming output
+ */
+
+import type {
+  RuntimeProvider,
+  RuntimeType,
+  RuntimeFileSystem,
+  ProcessResult,
+  SpawnedProcess,
+  SpawnOptions,
+  PortEvent,
+  DirEntry,
+  FileStat,
+  WatchEvent,
+  WatchCallback,
+  Disposer,
+} from './runtime-provider';
+import { WORK_DIR } from '~/utils/constants';
+import { createScopedLogger } from '~/utils/logger';
+
+const logger = createScopedLogger('RuntimeClient');
+
+/*
+ * ---------------------------------------------------------------------------
+ * Client FileSystem (proxies to /api/runtime/fs)
+ * ---------------------------------------------------------------------------
+ */
+
+class ClientFileSystem implements RuntimeFileSystem {
+  #projectId: string;
+
+  constructor(projectId: string) {
+    this.#projectId = projectId;
+  }
+
+  /** Update the project ID (called when runtime is re-booted). */
+  setProjectId(projectId: string): void {
+    this.#projectId = projectId;
+  }
+
+  async readFile(path: string, encoding: BufferEncoding = 'utf-8'): Promise<string> {
+    const params = new URLSearchParams({
+      projectId: this.#projectId,
+      path,
+      encoding,
+    });
+
+    const response = await fetch(`/api/runtime/fs?${params}&op=readFile`);
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to read file "${path}": ${error}`);
+    }
+
+    return response.text();
+  }
+
+  async readFileRaw(path: string): Promise<Uint8Array> {
+    const params = new URLSearchParams({
+      projectId: this.#projectId,
+      path,
+      op: 'readFileRaw',
+    });
+
+    const response = await fetch(`/api/runtime/fs?${params}`);
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to read file "${path}": ${error}`);
+    }
+
+    const buffer = await response.arrayBuffer();
+
+    return new Uint8Array(buffer);
+  }
+
+  async writeFile(path: string, content: string | Uint8Array): Promise<void> {
+    const isBinary = content instanceof Uint8Array;
+    const body = JSON.stringify({
+      projectId: this.#projectId,
+      path,
+      content: isBinary ? btoa(String.fromCharCode(...content)) : content,
+      binary: isBinary,
+    });
+
+    const response = await fetch('/api/runtime/fs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to write file "${path}": ${error}`);
+    }
+  }
+
+  async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
+    const body = JSON.stringify({
+      projectId: this.#projectId,
+      path,
+      recursive: options?.recursive ?? false,
+      op: 'mkdir',
+    });
+
+    const response = await fetch('/api/runtime/fs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to create directory "${path}": ${error}`);
+    }
+  }
+
+  async readdir(path: string): Promise<DirEntry[]> {
+    const params = new URLSearchParams({
+      projectId: this.#projectId,
+      path,
+      op: 'readdir',
+    });
+
+    const response = await fetch(`/api/runtime/fs?${params}`);
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to read directory "${path}": ${error}`);
+    }
+
+    return response.json();
+  }
+
+  async stat(path: string): Promise<FileStat> {
+    const params = new URLSearchParams({
+      projectId: this.#projectId,
+      path,
+      op: 'stat',
+    });
+
+    const response = await fetch(`/api/runtime/fs?${params}`);
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to stat "${path}": ${error}`);
+    }
+
+    return response.json();
+  }
+
+  async rm(path: string, options?: { recursive?: boolean; force?: boolean }): Promise<void> {
+    const body = JSON.stringify({
+      projectId: this.#projectId,
+      path,
+      recursive: options?.recursive ?? false,
+      force: options?.force ?? false,
+      op: 'rm',
+    });
+
+    const response = await fetch('/api/runtime/fs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to remove "${path}": ${error}`);
+    }
+  }
+
+  async exists(path: string): Promise<boolean> {
+    const params = new URLSearchParams({
+      projectId: this.#projectId,
+      path,
+      op: 'exists',
+    });
+
+    const response = await fetch(`/api/runtime/fs?${params}`);
+
+    if (!response.ok) {
+      return false;
+    }
+
+    const result = await response.json();
+
+    return result.exists;
+  }
+
+  async rename(oldPath: string, newPath: string): Promise<void> {
+    const body = JSON.stringify({
+      projectId: this.#projectId,
+      oldPath,
+      newPath,
+      op: 'rename',
+    });
+
+    const response = await fetch('/api/runtime/fs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to rename "${oldPath}" to "${newPath}": ${error}`);
+    }
+  }
+
+  /**
+   * Watch for file-system changes via SSE.
+   *
+   * Opens an SSE connection to `/api/runtime/fs?op=watch` which streams
+   * file change events from the server's file watcher.
+   */
+  watch(glob: string, callback: WatchCallback): Disposer {
+    const params = new URLSearchParams({
+      projectId: this.#projectId,
+      glob,
+      op: 'watch',
+    });
+
+    let eventSource: EventSource | null = null;
+
+    try {
+      eventSource = new EventSource(`/api/runtime/fs?${params}`);
+
+      eventSource.onmessage = (event) => {
+        try {
+          const events: WatchEvent[] = JSON.parse(event.data);
+          callback(events);
+        } catch (err) {
+          logger.error('Failed to parse watch event:', err);
+        }
+      };
+
+      eventSource.onerror = () => {
+        logger.warn('File watch SSE connection error, will attempt reconnect');
+      };
+    } catch (err) {
+      logger.error('Failed to start file watcher:', err);
+    }
+
+    return () => {
+      if (eventSource) {
+        eventSource.close();
+        eventSource = null;
+      }
+    };
+  }
+}
+
+/*
+ * ---------------------------------------------------------------------------
+ * RuntimeClient
+ * ---------------------------------------------------------------------------
+ */
+
+/**
+ * Client-side runtime proxy that communicates with the server via HTTP.
+ *
+ * Implements the same {@link RuntimeProvider} interface as the server-side
+ * {@link LocalRuntime}, enabling seamless migration from WebContainer.
+ */
+export class RuntimeClient implements RuntimeProvider {
+  readonly type: RuntimeType = 'local';
+
+  #projectId = '';
+  #workdir = '';
+  #fs: ClientFileSystem;
+  #portListeners: Array<(event: PortEvent) => void> = [];
+  #activeSessions = new Map<
+    string,
+    { eventSource: EventSource | null; dataListeners: Array<(data: string) => void> }
+  >();
+  #portEventSource: EventSource | null = null;
+
+  constructor() {
+    this.#fs = new ClientFileSystem('');
+  }
+
+  get projectId(): string {
+    return this.#projectId;
+  }
+
+  get workdir(): string {
+    return this.#workdir;
+  }
+
+  get fs(): RuntimeFileSystem {
+    return this.#fs;
+  }
+
+  async boot(projectId: string): Promise<void> {
+    const response = await fetch('/api/runtime/exec', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ op: 'boot', projectId }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to boot runtime for "${projectId}": ${error}`);
+    }
+
+    /* Consume the response body (server returns workdir + status). */
+    await response.json();
+
+    this.#projectId = projectId;
+
+    /*
+     * Use the virtual WORK_DIR as the client-facing workdir.
+     * All stores use WORK_DIR-prefixed paths as keys; the server resolves
+     * the actual filesystem path via the projectId.
+     */
+    this.#workdir = WORK_DIR;
+    this.#fs.setProjectId(projectId);
+
+    // Start listening for port events via SSE
+    this.#startPortListener();
+
+    logger.info(`Runtime booted for project "${projectId}" at ${this.#workdir}`);
+  }
+
+  async spawn(command: string, args: string[] = [], options: SpawnOptions = {}): Promise<SpawnedProcess> {
+    const response = await fetch('/api/runtime/terminal', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        op: 'spawn',
+        projectId: this.#projectId,
+        command: args.length > 0 ? `${command} ${args.join(' ')}` : command,
+        cols: options.terminal?.cols ?? 80,
+        rows: options.terminal?.rows ?? 24,
+        env: options.env,
+        cwd: options.cwd,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to spawn process: ${error}`);
+    }
+
+    const { sessionId, pid } = await response.json();
+    const dataListeners: Array<(data: string) => void> = [];
+
+    // Open SSE connection for this session's output
+    const eventSource = new EventSource(`/api/runtime/terminal?op=stream&sessionId=${encodeURIComponent(sessionId)}`);
+
+    eventSource.onmessage = (event) => {
+      try {
+        const parsed = JSON.parse(event.data);
+
+        if (parsed.type === 'data') {
+          for (const listener of dataListeners) {
+            listener(parsed.data);
+          }
+        } else if (parsed.type === 'exit') {
+          eventSource.close();
+          this.#activeSessions.delete(sessionId);
+        }
+      } catch {
+        // Raw text data
+        for (const listener of dataListeners) {
+          listener(event.data);
+        }
+      }
+    };
+
+    eventSource.onerror = () => {
+      logger.warn(`Terminal SSE error for session ${sessionId}`);
+    };
+
+    this.#activeSessions.set(sessionId, { eventSource, dataListeners });
+
+    const exitPromise = new Promise<number>((resolve) => {
+      const exitListener = (event: MessageEvent) => {
+        try {
+          const parsed = JSON.parse(event.data);
+
+          if (parsed.type === 'exit') {
+            resolve(parsed.exitCode ?? 1);
+            eventSource.removeEventListener('message', exitListener);
+          }
+        } catch {
+          // Ignore parse errors
+        }
+      };
+
+      eventSource.addEventListener('message', exitListener);
+    });
+
+    return {
+      id: sessionId,
+      pid,
+
+      write: (data: string) => {
+        fetch('/api/runtime/terminal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ op: 'write', sessionId, data }),
+        }).catch((err) => logger.error('Failed to write to terminal:', err));
+      },
+
+      kill: (signal?: string) => {
+        fetch('/api/runtime/terminal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ op: 'kill', sessionId, signal }),
+        }).catch((err) => logger.error('Failed to kill terminal:', err));
+      },
+
+      resize: (dimensions: { cols: number; rows: number }) => {
+        fetch('/api/runtime/terminal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ op: 'resize', sessionId, ...dimensions }),
+        }).catch((err) => logger.error('Failed to resize terminal:', err));
+      },
+
+      onExit: exitPromise,
+
+      onData: (callback: (data: string) => void): Disposer => {
+        dataListeners.push(callback);
+
+        return () => {
+          const idx = dataListeners.indexOf(callback);
+
+          if (idx !== -1) {
+            dataListeners.splice(idx, 1);
+          }
+        };
+      },
+    };
+  }
+
+  async exec(command: string, options: SpawnOptions = {}): Promise<ProcessResult> {
+    const response = await fetch('/api/runtime/exec', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        op: 'exec',
+        projectId: this.#projectId,
+        command,
+        cwd: options.cwd,
+        env: options.env,
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Failed to exec command: ${error}`);
+    }
+
+    return response.json();
+  }
+
+  getPreviewUrl(port: number): string {
+    return `http://localhost:${port}`;
+  }
+
+  onPortEvent(callback: (event: PortEvent) => void): Disposer {
+    this.#portListeners.push(callback);
+
+    return () => {
+      const idx = this.#portListeners.indexOf(callback);
+
+      if (idx !== -1) {
+        this.#portListeners.splice(idx, 1);
+      }
+    };
+  }
+
+  async teardown(): Promise<void> {
+    // Close all SSE connections
+    for (const [, session] of this.#activeSessions) {
+      session.eventSource?.close();
+    }
+
+    this.#activeSessions.clear();
+
+    // Close port event SSE
+    if (this.#portEventSource) {
+      this.#portEventSource.close();
+      this.#portEventSource = null;
+    }
+
+    this.#portListeners = [];
+
+    // Tell the server to tear down
+    if (this.#projectId) {
+      await fetch('/api/runtime/exec', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ op: 'teardown', projectId: this.#projectId }),
+      }).catch((err) => logger.error('Failed to tear down runtime:', err));
+    }
+
+    logger.info(`RuntimeClient torn down for project "${this.#projectId}"`);
+  }
+
+  /*
+   * -------------------------------------------------------------------------
+   * Private Helpers
+   * -------------------------------------------------------------------------
+   */
+
+  /** Start listening for port events via SSE. */
+  #startPortListener(): void {
+    if (this.#portEventSource) {
+      this.#portEventSource.close();
+    }
+
+    const params = new URLSearchParams({
+      projectId: this.#projectId,
+      op: 'portEvents',
+    });
+
+    this.#portEventSource = new EventSource(`/api/runtime/exec?${params}`);
+
+    this.#portEventSource.onmessage = (event) => {
+      try {
+        const portEvent: PortEvent = JSON.parse(event.data);
+
+        for (const listener of this.#portListeners) {
+          try {
+            listener(portEvent);
+          } catch (err) {
+            logger.error('Port event listener error:', err);
+          }
+        }
+      } catch {
+        // Ignore parse errors
+      }
+    };
+
+    this.#portEventSource.onerror = () => {
+      logger.warn('Port event SSE connection error');
+    };
+  }
+}

@@ -1,12 +1,9 @@
 import { json, type ActionFunctionArgs } from '@remix-run/node';
-import { createScopedLogger } from '~/utils/logger';
+import { handleApiError, externalFetch, ApiError } from '~/lib/api/apiUtils';
 import { withSecurity } from '~/lib/security';
 
-const logger = createScopedLogger('SupabaseVars');
-
 async function supabaseVariablesAction({ request }: ActionFunctionArgs) {
-  try {
-    // Add proper type assertion for the request body
+  return handleApiError('SupabaseVars', async () => {
     const body = (await request.json()) as { projectId?: string; token?: string };
     const { projectId, token } = body;
 
@@ -14,25 +11,20 @@ async function supabaseVariablesAction({ request }: ActionFunctionArgs) {
       return json({ error: 'Project ID and token are required' }, { status: 400 });
     }
 
-    const response = await fetch(`https://api.supabase.com/v1/projects/${projectId}/api-keys`, {
-      method: 'GET',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
+    const response = await externalFetch({
+      url: `https://api.supabase.com/v1/projects/${projectId}/api-keys`,
+      token,
+      headers: { 'Content-Type': 'application/json' },
     });
 
     if (!response.ok) {
-      return json({ error: `Failed to fetch API keys: ${response.statusText}` }, { status: response.status });
+      throw new ApiError(`Failed to fetch API keys: ${response.statusText}`, response.status);
     }
 
     const apiKeys = await response.json();
 
     return json({ apiKeys });
-  } catch (error) {
-    logger.error('Error fetching project API keys:', error);
-    return json({ error: error instanceof Error ? error.message : 'Unknown error occurred' }, { status: 500 });
-  }
+  });
 }
 
 export const action = withSecurity(supabaseVariablesAction, {

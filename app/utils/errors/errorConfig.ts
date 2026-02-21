@@ -49,12 +49,12 @@ export const SUPPRESSION_PATTERNS: Array<{
   },
   {
     pattern: /prod\.spline\.design.*403|spline.*forbidden/i,
-    reason: 'Spline CDN blocked in WebContainer - expected behavior',
+    reason: 'Spline CDN blocked — expected behavior',
     categories: ['preview', 'network'],
   },
   {
     pattern: /@splinetool\/.*error|splinetool.*failed/i,
-    reason: 'Spline library loading issue in WebContainer environment',
+    reason: 'Spline library loading issue — expected behavior',
     categories: ['preview'],
   },
   {
@@ -117,7 +117,7 @@ export const SUPPRESSION_PATTERNS: Array<{
     categories: ['preview', 'network'],
   },
 
-  // React hydration mismatches (common in WebContainer, page still renders)
+  /* React hydration mismatches (common in dev, page still renders) */
   {
     pattern: /Text content does not match server-rendered HTML/i,
     reason: 'Hydration mismatches self-recover; page renders correctly',
@@ -135,21 +135,21 @@ export const SUPPRESSION_PATTERNS: Array<{
   },
   {
     pattern: /InvariantError.*workUnitAsyncStorage/i,
-    reason: 'Next.js 15+ async storage issue in WebContainer — page may still render',
+    reason: 'Next.js 15+ async storage issue — page may still render',
     categories: ['preview'],
   },
 
-  // Tailwind CSS config TypeScript import (non-critical in WebContainer)
+  /* Tailwind CSS config TypeScript import (non-critical) */
   {
     pattern: /import type.*from ['"]tailwindcss['"]/i,
     reason: 'Tailwind config TS import logged to console — page renders correctly',
     categories: ['preview', 'terminal'],
   },
 
-  // Extra attribute hydration warnings (common when WebContainer adds attributes)
+  /* Extra attribute hydration warnings */
   {
     pattern: /extra attributes from the server/i,
-    reason: 'WebContainer may add extra attributes — page renders correctly',
+    reason: 'Server may add extra attributes — page renders correctly',
     categories: ['preview'],
   },
 ];

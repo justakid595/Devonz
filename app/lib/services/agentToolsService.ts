@@ -2,13 +2,13 @@
  * Agent Tools Service
  *
  * This service provides the core tool implementations for Devonz AI Agent Mode.
- * Tools enable the AI to interact with the WebContainer filesystem and understand
+ * Tools enable the AI to interact with the runtime filesystem and understand
  * the codebase context for autonomous coding capabilities.
  *
  * Tools follow the Vercel AI SDK format for seamless integration with the chat system.
  */
 
-import { webcontainer } from '~/lib/webcontainer';
+import { runtime } from '~/lib/runtime';
 import { createScopedLogger } from '~/utils/logger';
 import { autoFixStore } from '~/lib/stores/autofix';
 import type {
@@ -68,7 +68,7 @@ function validatePath(inputPath: string): { valid: true; normalized: string } | 
 
 /**
  * Read File Tool
- * Reads the contents of a file from the WebContainer filesystem.
+ * Reads the contents of a file from the runtime filesystem.
  */
 async function readFile(params: ReadFileParams): Promise<ToolExecutionResult<ReadFileResult>> {
   const { path, startLine, endLine } = params;
@@ -79,7 +79,7 @@ async function readFile(params: ReadFileParams): Promise<ToolExecutionResult<Rea
   }
 
   try {
-    const container = await webcontainer;
+    const container = await runtime;
     const content = await container.fs.readFile(pathCheck.normalized, 'utf-8');
     const lines = content.split('\n');
 
@@ -118,7 +118,7 @@ async function readFile(params: ReadFileParams): Promise<ToolExecutionResult<Rea
 
 /**
  * Write File Tool
- * Writes content to a file in the WebContainer filesystem.
+ * Writes content to a file in the runtime filesystem.
  * Creates parent directories if they don't exist.
  */
 async function writeFile(params: WriteFileParams): Promise<ToolExecutionResult<WriteFileResult>> {
@@ -132,7 +132,7 @@ async function writeFile(params: WriteFileParams): Promise<ToolExecutionResult<W
   const safePath = pathCheck.normalized;
 
   try {
-    const container = await webcontainer;
+    const container = await runtime;
 
     let fileExists = false;
 
@@ -149,7 +149,7 @@ async function writeFile(params: WriteFileParams): Promise<ToolExecutionResult<W
       await container.fs.mkdir(parentDir, { recursive: true });
     }
 
-    await container.fs.writeFile(safePath, content, 'utf-8');
+    await container.fs.writeFile(safePath, content);
 
     logger.info(`Wrote file: ${path}`, {
       bytes: content.length,
@@ -189,18 +189,18 @@ async function listDirectory(params: ListDirectoryParams): Promise<ToolExecution
   }
 
   try {
-    const container = await webcontainer;
+    const container = await runtime;
     const entries: DirectoryEntry[] = [];
 
     // Directories to skip during recursive traversal
     const skipDirs = ['node_modules', '.git', '.next', 'dist', 'build', '.cache'];
 
     async function traverse(dirPath: string, currentDepth: number): Promise<void> {
-      const items = await container.fs.readdir(dirPath, { withFileTypes: true });
+      const items = await container.fs.readdir(dirPath);
 
       for (const item of items) {
         const fullPath = dirPath === '/' ? `/${item.name}` : `${dirPath}/${item.name}`;
-        const isDir = item.isDirectory();
+        const isDir = item.isDirectory;
 
         entries.push({
           name: fullPath,
@@ -245,7 +245,7 @@ async function listDirectory(params: ListDirectoryParams): Promise<ToolExecution
 
 /**
  * Run Command Tool
- * Executes a shell command in the WebContainer using the DevonzShell.
+ * Executes a shell command using the DevonzShell.
  * Requires the terminal to be initialized and ready.
  */
 async function runCommand(params: RunCommandParams): Promise<ToolExecutionResult<RunCommandResult>> {
@@ -376,13 +376,21 @@ async function getErrors(params: GetErrorsParams): Promise<ToolExecutionResult<G
 
 /**
  * Search Code Tool
- * Searches for a text pattern across files in the WebContainer.
+ * Searches for a text pattern across files in the project.
  */
 async function searchCode(params: SearchCodeParams): Promise<ToolExecutionResult<SearchCodeResult>> {
-  const { query, path = '/', maxResults = 50, includePattern, excludePattern, filePattern, caseSensitive = false } = params;
+  const {
+    query,
+    path = '/',
+    maxResults = 50,
+    includePattern,
+    excludePattern,
+    filePattern,
+    caseSensitive = false,
+  } = params;
 
   try {
-    const container = await webcontainer;
+    const container = await runtime;
     const results: SearchMatch[] = [];
     let totalMatches = 0;
 
@@ -397,7 +405,7 @@ async function searchCode(params: SearchCodeParams): Promise<ToolExecutionResult
         return;
       }
 
-      const items = await container.fs.readdir(dirPath, { withFileTypes: true });
+      const items = await container.fs.readdir(dirPath);
 
       for (const item of items) {
         if (totalMatches >= maxResults) {
@@ -406,7 +414,7 @@ async function searchCode(params: SearchCodeParams): Promise<ToolExecutionResult
 
         const fullPath = dirPath === '/' ? `/${item.name}` : `${dirPath}/${item.name}`;
 
-        if (item.isDirectory()) {
+        if (item.isDirectory) {
           // Skip excluded directories
           if (!skipDirs.includes(item.name) && !item.name.startsWith('.')) {
             // Check exclude pattern
@@ -469,7 +477,9 @@ async function searchCode(params: SearchCodeParams): Promise<ToolExecutionResult
                 isMatch = new RegExp(query, caseSensitive ? '' : 'i').test(lines[i]);
               } catch {
                 // Invalid regex, fall back to literal match
-                isMatch = caseSensitive ? lines[i].includes(query) : lines[i].toLowerCase().includes(query.toLowerCase());
+                isMatch = caseSensitive
+                  ? lines[i].includes(query)
+                  : lines[i].toLowerCase().includes(query.toLowerCase());
               }
 
               if (isMatch) {
@@ -532,7 +542,7 @@ async function searchCode(params: SearchCodeParams): Promise<ToolExecutionResult
 
 /**
  * Delete File Tool
- * Deletes a file or directory from the WebContainer filesystem.
+ * Deletes a file or directory from the runtime filesystem.
  */
 async function deleteFile(params: {
   path: string;
@@ -548,15 +558,15 @@ async function deleteFile(params: {
   const safePath = pathCheck.normalized;
 
   try {
-    const container = await webcontainer;
+    const container = await runtime;
 
     try {
-      const stat = await container.fs.readdir(safePath, { withFileTypes: true });
+      const entries = await container.fs.readdir(safePath);
 
       if (recursive) {
         await container.fs.rm(safePath, { recursive: true });
       } else {
-        if (stat.length > 0) {
+        if (entries.length > 0) {
           return {
             success: false,
             error: `Directory '${safePath}' is not empty. Use recursive: true to delete non-empty directories.`,
@@ -591,7 +601,7 @@ async function deleteFile(params: {
 
 /**
  * Rename/Move File Tool
- * Renames or moves a file in the WebContainer filesystem.
+ * Renames or moves a file in the runtime filesystem.
  */
 async function renameFile(params: {
   oldPath: string;
@@ -600,7 +610,7 @@ async function renameFile(params: {
   const { oldPath, newPath } = params;
 
   try {
-    const container = await webcontainer;
+    const container = await runtime;
 
     // Read the source file
     const content = await container.fs.readFile(oldPath, 'utf-8');
@@ -613,7 +623,7 @@ async function renameFile(params: {
     }
 
     // Write to new location
-    await container.fs.writeFile(newPath, content, 'utf-8');
+    await container.fs.writeFile(newPath, content);
 
     // Delete old file
     await container.fs.rm(oldPath);
@@ -651,7 +661,7 @@ async function patchFile(params: {
   const { path, replacements } = params;
 
   try {
-    const container = await webcontainer;
+    const container = await runtime;
     let content = await container.fs.readFile(path, 'utf-8');
     let applied = 0;
 
@@ -669,7 +679,7 @@ async function patchFile(params: {
       };
     }
 
-    await container.fs.writeFile(path, content, 'utf-8');
+    await container.fs.writeFile(path, content);
 
     logger.info(`Patched file: ${path}`, { applied, total: replacements.length });
 
@@ -777,7 +787,7 @@ export const agentToolDefinitions: Record<string, AgentToolDefinition> = {
   devonz_run_command: {
     name: 'devonz_run_command',
     description:
-      'Execute a shell command in the project environment. Use this to run build commands, install dependencies, run tests, or execute scripts. Note: Some commands may have limitations in the WebContainer environment.',
+      'Execute a shell command in the project environment. Use this to run build commands, install dependencies, run tests, or execute scripts.',
     parameters: {
       type: 'object',
       properties: {
