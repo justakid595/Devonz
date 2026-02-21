@@ -565,8 +565,10 @@ export default function SupabaseTab() {
                                       e.stopPropagation();
 
                                       if (connection.credentials?.supabaseUrl) {
-                                        navigator.clipboard.writeText(connection.credentials.supabaseUrl);
-                                        toast.success('URL copied to clipboard');
+                                        navigator.clipboard.writeText(connection.credentials.supabaseUrl).then(
+                                          () => toast.success('URL copied to clipboard'),
+                                          () => toast.error('Failed to copy'),
+                                        );
                                       }
                                     }}
                                     className="w-8 h-8"
@@ -593,8 +595,10 @@ export default function SupabaseTab() {
                                       e.stopPropagation();
 
                                       if (connection.credentials?.anonKey) {
-                                        navigator.clipboard.writeText(connection.credentials.anonKey);
-                                        toast.success('Key copied to clipboard');
+                                        navigator.clipboard.writeText(connection.credentials.anonKey).then(
+                                          () => toast.success('Key copied to clipboard'),
+                                          () => toast.error('Failed to copy'),
+                                        );
                                       }
                                     }}
                                     className="w-8 h-8"

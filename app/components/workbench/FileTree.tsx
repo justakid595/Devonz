@@ -127,19 +127,15 @@ export const FileTree = memo(
     };
 
     const onCopyPath = (fileOrFolder: FileNode | FolderNode) => {
-      try {
-        navigator.clipboard.writeText(fileOrFolder.fullPath);
-      } catch (error) {
+      navigator.clipboard.writeText(fileOrFolder.fullPath).catch((error) => {
         logger.error(error);
-      }
+      });
     };
 
     const onCopyRelativePath = (fileOrFolder: FileNode | FolderNode) => {
-      try {
-        navigator.clipboard.writeText(fileOrFolder.fullPath.substring((rootFolder || '').length));
-      } catch (error) {
+      navigator.clipboard.writeText(fileOrFolder.fullPath.substring((rootFolder || '').length)).catch((error) => {
         logger.error(error);
-      }
+      });
     };
 
     return (

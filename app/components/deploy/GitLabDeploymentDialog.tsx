@@ -322,8 +322,10 @@ export function GitLabDeploymentDialog({ isOpen, onClose, projectName, files }: 
                       </code>
                       <motion.button
                         onClick={() => {
-                          navigator.clipboard.writeText(createdRepoUrl);
-                          toast.success('URL copied to clipboard');
+                          navigator.clipboard.writeText(createdRepoUrl).then(
+                            () => toast.success('URL copied to clipboard'),
+                            () => toast.error('Failed to copy URL'),
+                          );
                         }}
                         className="p-2 text-devonz-elements-textSecondary hover:text-devonz-elements-textPrimary dark:text-devonz-elements-textSecondary-dark dark:hover:text-devonz-elements-textPrimary-dark bg-devonz-elements-background-depth-1 dark:bg-devonz-elements-background-depth-4 rounded-lg border border-devonz-elements-borderColor dark:border-devonz-elements-borderColor-dark"
                         whileHover={{ scale: 1.05 }}
@@ -373,8 +375,10 @@ export function GitLabDeploymentDialog({ isOpen, onClose, projectName, files }: 
                     </motion.a>
                     <motion.button
                       onClick={() => {
-                        navigator.clipboard.writeText(createdRepoUrl);
-                        toast.success('URL copied to clipboard');
+                        navigator.clipboard.writeText(createdRepoUrl).then(
+                          () => toast.success('URL copied to clipboard'),
+                          () => toast.error('Failed to copy URL'),
+                        );
                       }}
                       className="px-4 py-2 rounded-lg bg-devonz-elements-background-depth-2 dark:bg-devonz-elements-background-depth-3 text-devonz-elements-textSecondary dark:text-devonz-elements-textSecondary-dark hover:bg-devonz-elements-background-depth-3 dark:hover:bg-devonz-elements-background-depth-4 text-sm inline-flex items-center gap-2 border border-devonz-elements-borderColor dark:border-devonz-elements-borderColor-dark"
                       whileHover={{ scale: 1.02 }}

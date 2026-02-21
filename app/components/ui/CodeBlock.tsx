@@ -28,7 +28,9 @@ export function CodeBlock({
   const [copied, setCopied] = useState(false);
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(code);
+    navigator.clipboard.writeText(code).catch(() => {
+      /* clipboard unavailable */
+    });
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
     onCopy?.();

@@ -25,7 +25,9 @@ export const CodeBlock = memo(
         return;
       }
 
-      navigator.clipboard.writeText(code);
+      navigator.clipboard.writeText(code).catch(() => {
+        /* clipboard unavailable */
+      });
 
       setCopied(true);
 
