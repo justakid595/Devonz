@@ -831,13 +831,20 @@ export class ActionRunner {
     try {
       const runtime = await this.#runtime;
 
-      // Step 1: Read and parse package.json
+      // Step 1: Read and parse package.json (check existence first to avoid 404 console noise)
+      const pkgExists = await runtime.fs.exists('package.json');
+
+      if (!pkgExists) {
+        logger.debug('No package.json found, skipping dependency validation');
+        return;
+      }
+
       let pkgContent: string;
 
       try {
         pkgContent = await runtime.fs.readFile('package.json', 'utf-8');
       } catch {
-        logger.debug('No package.json found, skipping dependency validation');
+        logger.debug('Failed to read package.json, skipping dependency validation');
         return;
       }
 

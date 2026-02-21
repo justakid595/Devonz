@@ -79,10 +79,25 @@ async function fsLoader({ request }: LoaderFunctionArgs) {
         const entries = await runtime.fs.readdir(filePath);
         return json(entries);
       } catch (error) {
-        const message = error instanceof Error ? error.message : 'Readdir failed';
-        logger.debug(`readdir not found: ${filePath}`);
+        /*
+         * Return an empty array (200) instead of 404 for non-existent
+         * directories. The dependency validator and component import
+         * validator optimistically scan common directory names (src, app,
+         * pages, components, etc.) — most won't exist for any given
+         * project. Returning [] avoids noisy browser-console 404 errors
+         * while being semantically correct: "nothing in this directory".
+         */
+        const code = (error as NodeJS.ErrnoException)?.code;
 
-        return json({ error: message }, { status: 404 });
+        if (code === 'ENOENT') {
+          logger.debug(`readdir: directory does not exist, returning []: ${filePath}`);
+          return json([]);
+        }
+
+        const message = error instanceof Error ? error.message : 'Readdir failed';
+        logger.warn(`readdir failed: ${filePath}`, error);
+
+        return json({ error: message }, { status: 500 });
       }
     }
 
