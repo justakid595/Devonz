@@ -15,6 +15,7 @@ const logger = createScopedLogger('create-summary');
  */
 const summaryCache = new Map<string, { summary: string; timestamp: number }>();
 const SUMMARY_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+const SUMMARY_CACHE_MAX_SIZE = 50; // Cap to prevent unbounded memory growth
 
 export async function createSummary(props: {
   messages: Message[];
@@ -203,7 +204,15 @@ Please provide a summary of the chat till now including the hitorical summary of
 
   const response = resp.text;
 
-  // Store in cache for future identical requests
+  // Store in cache for future identical requests (evict oldest if over cap)
+  if (summaryCache.size >= SUMMARY_CACHE_MAX_SIZE) {
+    const oldestKey = summaryCache.keys().next().value;
+
+    if (oldestKey !== undefined) {
+      summaryCache.delete(oldestKey);
+    }
+  }
+
   summaryCache.set(cacheKey, { summary: response, timestamp: Date.now() });
 
   if (onFinish) {

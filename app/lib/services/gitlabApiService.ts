@@ -20,9 +20,20 @@ interface CacheEntry<T> {
 
 class GitLabCache {
   private _cache = new Map<string, CacheEntry<unknown>>();
+  private _maxSize = 100;
 
   set<T>(key: string, data: T, duration = CACHE_DURATION): void {
     const timestamp = Date.now();
+
+    // Evict oldest entry if at capacity
+    if (this._cache.size >= this._maxSize && !this._cache.has(key)) {
+      const oldestKey = this._cache.keys().next().value;
+
+      if (oldestKey !== undefined) {
+        this._cache.delete(oldestKey);
+      }
+    }
+
     this._cache.set(key, {
       data,
       timestamp,
