@@ -464,7 +464,7 @@ export class StreamingMessageParser {
   }
 
   #extractAttribute(tag: string, attributeName: string): string | undefined {
-    const match = tag.match(new RegExp(`${attributeName}="([^"]*)"`, 'i'));
+    const match = tag.match(new RegExp(`${attributeName}=["']([^"']*)["']`, 'i'));
     return match ? match[1] : undefined;
   }
 }
@@ -495,5 +495,5 @@ function createQuickActionElement(props: Record<string, string>, label: string) 
 }
 
 function createQuickActionGroup(buttons: string[]) {
-  return `<div class=\"__devonzQuickAction__\" data-devonz-quick-action=\"true\">${buttons.join('')}</div>`;
+  return `<div class="__devonzQuickAction__" data-devonz-quick-action="true">${buttons.join('')}</div>`;
 }

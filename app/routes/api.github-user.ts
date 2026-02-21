@@ -75,7 +75,7 @@ async function githubUserAction({ request, context }: ActionFunctionArgs) {
       action = formData.get('action') as string;
       repoFullName = formData.get('repo') as string;
       searchQuery = formData.get('query') as string;
-      perPage = parseInt(formData.get('per_page') as string) || 30;
+      perPage = parseInt(formData.get('per_page') as string, 10) || 30;
     }
 
     const githubHeaders = { Accept: 'application/vnd.github.v3+json' };
