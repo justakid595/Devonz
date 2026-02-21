@@ -17,7 +17,13 @@ const logger = createScopedLogger('api.enhancer');
 // Zod schema for enhancer request validation
 const providerSchema = z.object({
   name: z.string().min(1, 'Provider name is required'),
-  staticModels: z.array(z.any()).optional(),
+  staticModels: z
+    .array(
+      z
+        .object({ name: z.string(), label: z.string(), provider: z.string(), maxTokenAllowed: z.number() })
+        .passthrough(),
+    )
+    .optional(),
   getApiKeyLink: z.string().optional(),
   labelForGetApiKey: z.string().optional(),
   icon: z.string().optional(),

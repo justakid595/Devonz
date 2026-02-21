@@ -193,7 +193,7 @@ export default class ZaiProvider extends BaseProvider {
 
       const header = { alg: 'HS256', sign_type: 'SIGN' };
 
-      const base64Url = (obj: any) =>
+      const base64Url = (obj: Record<string, unknown>) =>
         Buffer.from(JSON.stringify(obj)).toString('base64').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
       const signature = crypto
         .createHmac('sha256', secret)

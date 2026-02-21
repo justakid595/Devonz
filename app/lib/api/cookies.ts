@@ -41,7 +41,7 @@ export function getApiKeysFromCookie(cookieHeader: string | null): Record<string
   }
 }
 
-export function getProviderSettingsFromCookie(cookieHeader: string | null): Record<string, any> {
+export function getProviderSettingsFromCookie(cookieHeader: string | null): Record<string, Record<string, unknown>> {
   const cookies = parseCookies(cookieHeader);
 
   if (!cookies.providers) {
