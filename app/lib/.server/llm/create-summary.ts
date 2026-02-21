@@ -35,7 +35,7 @@ export async function createSummary(props: {
       currentProvider = provider;
 
       return { ...message, content };
-    } else if (message.role == 'assistant') {
+    } else if (message.role === 'assistant') {
       let content = message.content;
 
       content = simplifyDevonzActions(content);

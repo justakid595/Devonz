@@ -195,13 +195,14 @@ export const TerminalTabs = memo(() => {
 
               return (
                 <React.Fragment key={index}>
-                  {index == 0 ? (
+                  {index === 0 ? (
                     <button
                       key={index}
                       className={classNames(
                         'flex items-center text-sm cursor-pointer gap-1.5 px-3 py-2 h-full whitespace-nowrap rounded-full',
                         {
-                          'bg-devonz-elements-terminals-buttonBackground hover:text-devonz-elements-textPrimary': isActive,
+                          'bg-devonz-elements-terminals-buttonBackground hover:text-devonz-elements-textPrimary':
+                            isActive,
                           'bg-devonz-elements-background-depth-2 text-devonz-elements-textSecondary hover:bg-devonz-elements-terminals-buttonBackground':
                             !isActive,
                         },
@@ -295,7 +296,7 @@ export const TerminalTabs = memo(() => {
 
             logger.debug(`Starting devonz terminal [${index}]`);
 
-            if (index == 0) {
+            if (index === 0) {
               return (
                 <React.Fragment key={`terminal-container-${index}`}>
                   <Terminal

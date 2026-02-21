@@ -9,7 +9,7 @@ import type { IProviderSetting } from '~/types/model';
 import { createScopedLogger } from '~/utils/logger';
 import { getFilePaths, selectContext } from '~/lib/.server/llm/select-context';
 import type { ContextAnnotation, ProgressAnnotation } from '~/types/context';
-import { WORK_DIR } from '~/utils/constants';
+import { DEFAULT_MODEL, DEFAULT_PROVIDER, WORK_DIR } from '~/utils/constants';
 import { createSummary } from '~/lib/.server/llm/create-summary';
 import { extractPropertiesFromMessage } from '~/lib/.server/llm/utils';
 import type { DesignScheme } from '~/types/design-scheme';
@@ -427,8 +427,11 @@ async function chatAction({ context, request }: ActionFunctionArgs) {
 
             logger.info(`Reached max token limit (${MAX_TOKENS}): Continuing message (${switchesLeft} switches left)`);
 
-            const lastUserMessage = processedMessages.filter((x) => x.role == 'user').slice(-1)[0];
-            const { model, provider } = extractPropertiesFromMessage(lastUserMessage);
+            const lastUserMessage = processedMessages.filter((x) => x.role === 'user').slice(-1)[0];
+
+            const { model, provider } = lastUserMessage
+              ? extractPropertiesFromMessage(lastUserMessage)
+              : { model: DEFAULT_MODEL, provider: DEFAULT_PROVIDER.name };
             processedMessages.push({ id: generateId(), role: 'assistant', content });
             processedMessages.push({
               id: generateId(),

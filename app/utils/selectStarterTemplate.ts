@@ -706,7 +706,7 @@ export async function getTemplates(templateName: string, title?: string) {
   filteredFiles = filteredFiles.filter((x) => !x.path.startsWith('.devonz'));
 
   // check for ignore file in .devonz folder
-  const templateIgnoreFile = files.find((x) => x.path.startsWith('.devonz') && x.name == 'ignore');
+  const templateIgnoreFile = files.find((x) => x.path.startsWith('.devonz') && x.name === 'ignore');
 
   const filesToImport = {
     files: filteredFiles,
@@ -743,7 +743,7 @@ ${file.content}
 </devonzArtifact>
 `;
   let userMessage = ``;
-  const templatePromptFile = files.filter((x) => x.path.startsWith('.devonz')).find((x) => x.name == 'prompt');
+  const templatePromptFile = files.filter((x) => x.path.startsWith('.devonz')).find((x) => x.name === 'prompt');
 
   if (templatePromptFile) {
     userMessage = `

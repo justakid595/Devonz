@@ -3,7 +3,12 @@ import ignore from 'ignore';
 import type { IProviderSetting } from '~/types/model';
 import { IGNORE_PATTERNS, type FileMap } from './constants';
 import { DEFAULT_MODEL, DEFAULT_PROVIDER, PROVIDER_LIST } from '~/utils/constants';
-import { createFilesContext, extractCurrentContext, extractPropertiesFromMessage, simplifyDevonzActions } from './utils';
+import {
+  createFilesContext,
+  extractCurrentContext,
+  extractPropertiesFromMessage,
+  simplifyDevonzActions,
+} from './utils';
 import { createScopedLogger } from '~/utils/logger';
 import { resolveModel } from './resolve-model';
 
@@ -33,7 +38,7 @@ export async function selectContext(props: {
       currentProvider = provider;
 
       return { ...message, content };
-    } else if (message.role == 'assistant') {
+    } else if (message.role === 'assistant') {
       let content = message.content;
 
       content = simplifyDevonzActions(content);
@@ -69,7 +74,7 @@ export async function selectContext(props: {
   });
 
   let context = '';
-  const currrentFiles: string[] = [];
+  const currentFiles: string[] = [];
   const contextFiles: FileMap = {};
 
   if (codeContext?.type === 'codeContext') {
@@ -83,7 +88,7 @@ export async function selectContext(props: {
 
       if (codeContextFiles.includes(relativePath)) {
         contextFiles[relativePath] = files[path];
-        currrentFiles.push(relativePath);
+        currentFiles.push(relativePath);
       }
     });
     context = createFilesContext(contextFiles);
@@ -96,7 +101,7 @@ export async function selectContext(props: {
       ? (message.content.find((item) => item.type === 'text')?.text as string) || ''
       : message.content;
 
-  const lastUserMessage = processedMessages.filter((x) => x.role == 'user').pop();
+  const lastUserMessage = processedMessages.filter((x) => x.role === 'user').pop();
 
   if (!lastUserMessage) {
     throw new Error('No user message found');
@@ -146,7 +151,7 @@ export async function selectContext(props: {
         CRITICAL RULES:
         * Only include relevant files in the context buffer.
         * context buffer should not include any file that is not in the list of files above.
-        * context buffer is extremlly expensive, so only include files that are absolutely necessary.
+        * context buffer is extremely expensive, so only include files that are absolutely necessary.
         * If no changes are needed, you can leave the response empty updateContextBuffer tag.
         * Only 5 files can be placed in the context buffer at a time.
         * if the buffer is full, you need to exclude files that is not needed and include files that is relevent.
@@ -192,7 +197,7 @@ export async function selectContext(props: {
       return;
     }
 
-    if (currrentFiles.includes(path)) {
+    if (currentFiles.includes(path)) {
       return;
     }
 
