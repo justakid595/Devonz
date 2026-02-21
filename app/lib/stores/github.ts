@@ -6,7 +6,14 @@ import { createScopedLogger } from '~/utils/logger';
 const logger = createScopedLogger('GitHubStore');
 
 // Initialize with stored connection or defaults
-const storedConnection = typeof window !== 'undefined' ? localStorage.getItem('github_connection') : null;
+let storedConnection: string | null = null;
+
+try {
+  storedConnection = typeof window !== 'undefined' ? localStorage.getItem('github_connection') : null;
+} catch {
+  /* localStorage unavailable (private browsing, etc.) */
+}
+
 const defaultConnection: GitHubConnection = {
   user: null,
   token: '',
@@ -91,6 +98,10 @@ export const updateGitHubConnection = (updates: Partial<GitHubConnection>) => {
 
   // Persist to localStorage
   if (typeof window !== 'undefined') {
-    localStorage.setItem('github_connection', JSON.stringify(newState));
+    try {
+      localStorage.setItem('github_connection', JSON.stringify(newState));
+    } catch {
+      /* localStorage full or unavailable — skip */
+    }
   }
 };

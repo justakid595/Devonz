@@ -173,7 +173,11 @@ class GitLabConnectionStore {
     Cookies.remove('gitlabUrl');
 
     // Clear localStorage
-    localStorage.removeItem('gitlab_connection');
+    try {
+      localStorage.removeItem('gitlab_connection');
+    } catch {
+      /* localStorage unavailable — skip */
+    }
 
     // Reset state
     gitlabConnectionAtom.set({

@@ -377,7 +377,11 @@ export class ImportExportService {
    */
   static async deleteAllChats(db: IDBDatabase): Promise<void> {
     // Clear chat history from localStorage
-    localStorage.removeItem('devonz_chat_history');
+    try {
+      localStorage.removeItem('devonz_chat_history');
+    } catch {
+      /* localStorage unavailable — skip */
+    }
 
     // Clear chats from IndexedDB
     if (!db) {
