@@ -727,7 +727,9 @@ export function useDataOperations({
 
         // Get current API keys from cookies for potential undo
         const apiKeysStr = document.cookie.split(';').find((row) => row.trim().startsWith('apiKeys='));
-        const currentApiKeys = apiKeysStr ? JSON.parse(decodeURIComponent(apiKeysStr.split('=')[1])) : {};
+        const currentApiKeys = apiKeysStr
+          ? JSON.parse(decodeURIComponent(apiKeysStr.split('=').slice(1).join('=').trim()))
+          : {};
         setLastOperation({ type: 'import-api-keys', data: { previous: currentApiKeys } });
 
         // Step 4: Import API keys

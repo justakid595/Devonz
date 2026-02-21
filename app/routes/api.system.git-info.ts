@@ -87,7 +87,9 @@ async function gitInfoSystemLoader({ request, context }: LoaderFunctionArgs & { 
       .get('Cookie')
       ?.split(';')
       .find((cookie) => cookie.trim().startsWith('githubToken='))
-      ?.split('=')[1];
+      ?.split('=')
+      .slice(1)
+      .join('=');
 
     // Also check for token in Authorization header
     const authHeader = request.headers.get('Authorization');
@@ -250,7 +252,9 @@ async function gitInfoSystemLoader({ request, context }: LoaderFunctionArgs & { 
           .get('Cookie')
           ?.split(';')
           .find((cookie) => cookie.trim().startsWith('githubUsername='))
-          ?.split('=')[1];
+          ?.split('=')
+          .slice(1)
+          .join('=');
 
         if (!username) {
           logger.error('GitHub username not found in cookies');
