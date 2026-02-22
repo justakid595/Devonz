@@ -4,7 +4,7 @@ import { useSearchParams, useNavigate } from '@remix-run/react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { Header } from '~/components/header/Header';
 import type { ShowcaseTemplate, TemplateCategory } from '~/types/showcase-template';
-import { TEMPLATE_CATEGORIES } from '~/types/showcase-template';
+import { TEMPLATE_CATEGORIES, CATEGORY_COLORS, CATEGORY_LABELS } from '~/types/showcase-template';
 import { loadShowcaseTemplates } from '~/utils/showcase-templates';
 import { TemplatePreviewModal } from '~/components/templates/TemplatePreviewModal';
 
@@ -120,14 +120,8 @@ function TemplatesGallery() {
             placeholder="Search templates..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-10 pr-4 py-2.5 rounded-lg text-sm text-white placeholder-[#666] outline-none transition-colors"
-            style={{ backgroundColor: '#1a1a1a', border: '1px solid #333333' }}
-            onFocus={(e) => {
-              e.currentTarget.style.borderColor = '#3b82f6';
-            }}
-            onBlur={(e) => {
-              e.currentTarget.style.borderColor = '#333333';
-            }}
+            className="w-full pl-10 pr-4 py-2.5 rounded-lg text-sm text-white placeholder-[#666] outline-none transition-colors border border-[#333333] focus:border-[#3b82f6]"
+            style={{ backgroundColor: '#1a1a1a' }}
           />
         </div>
 
@@ -140,24 +134,11 @@ function TemplatesGallery() {
               <button
                 key={cat.id}
                 onClick={() => setActiveCategory(cat.id)}
-                className="px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200"
-                style={{
-                  backgroundColor: isActive ? '#3b82f6' : '#1a1a1a',
-                  color: isActive ? '#ffffff' : '#9ca3af',
-                  border: `1px solid ${isActive ? '#3b82f6' : '#333333'}`,
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.backgroundColor = '#2a2a2a';
-                    e.currentTarget.style.color = '#ffffff';
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) {
-                    e.currentTarget.style.backgroundColor = '#1a1a1a';
-                    e.currentTarget.style.color = '#9ca3af';
-                  }
-                }}
+                className={`px-3 py-1.5 rounded-lg text-sm font-medium whitespace-nowrap transition-all duration-200 border ${
+                  isActive
+                    ? 'bg-[#3b82f6] text-white border-[#3b82f6]'
+                    : 'bg-[#1a1a1a] text-[#9ca3af] border-[#333333] hover:bg-[#2a2a2a] hover:text-white'
+                }`}
               >
                 {cat.label}
               </button>
@@ -194,45 +175,13 @@ interface TemplateGalleryCardProps {
   onClick: (template: ShowcaseTemplate) => void;
 }
 
-const CATEGORY_COLORS: Record<string, string> = {
-  'landing-page': 'text-cyan-400',
-  portfolio: 'text-indigo-400',
-  'online-store': 'text-green-400',
-  dashboard: 'text-orange-400',
-  saas: 'text-purple-400',
-  'ai-app': 'text-pink-400',
-};
-
-const CATEGORY_LABELS: Record<string, string> = {
-  'landing-page': 'Landing Page',
-  portfolio: 'Portfolio',
-  'online-store': 'Online Store',
-  dashboard: 'Dashboard',
-  saas: 'SaaS',
-  'ai-app': 'AI App',
-};
-
 function TemplateGalleryCard({ template, onClick }: TemplateGalleryCardProps) {
   const iconColor = CATEGORY_COLORS[template.category] || 'text-cyan-400';
 
   return (
     <button
       onClick={() => onClick(template)}
-      className="group text-left rounded-xl overflow-hidden transition-all duration-300"
-      style={{
-        backgroundColor: '#1a1a1a',
-        border: '1px solid #333333',
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = '#444444';
-        e.currentTarget.style.transform = 'translateY(-2px)';
-        e.currentTarget.style.boxShadow = '0 8px 25px rgba(0,0,0,0.3)';
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = '#333333';
-        e.currentTarget.style.transform = 'translateY(0)';
-        e.currentTarget.style.boxShadow = 'none';
-      }}
+      className="group text-left rounded-xl overflow-hidden transition-all duration-300 bg-[#1a1a1a] border border-[#333333] hover:border-[#444444] hover:-translate-y-0.5 hover:shadow-lg"
     >
       {/* Preview Thumbnail */}
       <div className="relative aspect-[16/10] overflow-hidden" style={{ backgroundColor: '#0a0a0a' }}>

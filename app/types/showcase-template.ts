@@ -27,3 +27,21 @@ export const TEMPLATE_CATEGORIES: TemplateCategoryInfo[] = [
   { id: 'saas', label: 'SaaS', description: 'Software as a service applications' },
   { id: 'ai-app', label: 'AI Apps', description: 'AI-powered tools and applications' },
 ];
+
+export const CATEGORY_COLORS: Record<string, string> = {
+  'landing-page': 'text-cyan-400',
+  portfolio: 'text-indigo-400',
+  'online-store': 'text-green-400',
+  dashboard: 'text-orange-400',
+  saas: 'text-purple-400',
+  'ai-app': 'text-pink-400',
+};
+
+export const CATEGORY_LABELS: Record<string, string> = {
+  'landing-page': 'Landing Page',
+  portfolio: 'Portfolio',
+  'online-store': 'Online Store',
+  dashboard: 'Dashboard',
+  saas: 'SaaS',
+  'ai-app': 'AI App',
+};

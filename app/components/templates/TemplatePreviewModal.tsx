@@ -1,41 +1,105 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate } from '@remix-run/react';
 import type { ShowcaseTemplate } from '~/types/showcase-template';
+import { CATEGORY_LABELS } from '~/types/showcase-template';
 
 interface TemplatePreviewModalProps {
   template: ShowcaseTemplate | null;
   onClose: () => void;
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  'landing-page': 'Landing Page',
-  portfolio: 'Portfolio',
-  'online-store': 'Online Store',
-  dashboard: 'Dashboard',
-  saas: 'SaaS',
-  'ai-app': 'AI App',
-};
-
 export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({ template, onClose }) => {
   const navigate = useNavigate();
   const overlayRef = useRef<HTMLDivElement>(null);
-  const [screenshotError, setScreenshotError] = useState(false);
+  const modalRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const [iframeLoading, setIframeLoading] = useState(true);
+  const [iframeError, setIframeError] = useState(false);
 
+  // Reset states when template changes
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
+    setIframeLoading(true);
+    setIframeError(false);
+  }, [template]);
+
+  // Prevent body scroll when modal is open
+  useEffect(() => {
+    if (template) {
+      document.body.style.overflow = 'hidden';
+
+      return () => {
+        document.body.style.overflow = '';
+      };
+    }
+
+    return undefined;
+  }, [template]);
+
+  // Iframe load timeout — treat as error if iframe hasn't loaded in 15s
+  useEffect(() => {
+    if (!template?.vercelUrl?.trim() || iframeError || !iframeLoading) {
+      return undefined;
+    }
+
+    const timer = setTimeout(() => {
+      setIframeError(true);
+      setIframeLoading(false);
+    }, 15_000);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [template, iframeLoading, iframeError]);
+
+  // Focus trap and Escape key handling
+  useEffect(() => {
+    if (!template) {
+      return undefined;
+    }
+
+    // Focus close button on open
+    requestAnimationFrame(() => {
+      closeButtonRef.current?.focus();
+    });
+
+    const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onClose();
+        return;
+      }
+
+      if (e.key === 'Tab' && modalRef.current) {
+        const focusableElements = modalRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, iframe, [tabindex]:not([tabindex="-1"])',
+        );
+
+        if (focusableElements.length === 0) {
+          return;
+        }
+
+        const firstFocusable = focusableElements[0];
+        const lastFocusable = focusableElements[focusableElements.length - 1];
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstFocusable) {
+            e.preventDefault();
+            lastFocusable.focus();
+          }
+        } else {
+          if (document.activeElement === lastFocusable) {
+            e.preventDefault();
+            firstFocusable.focus();
+          }
+        }
       }
     };
 
-    document.addEventListener('keydown', handleEscape);
+    document.addEventListener('keydown', handleKeyDown);
 
-    return () => document.removeEventListener('keydown', handleEscape);
-  }, [onClose]);
-
-  useEffect(() => {
-    setScreenshotError(false);
-  }, [template]);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [template, onClose]);
 
   if (!template) {
     return null;
@@ -56,18 +120,51 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({ temp
     navigate(`/git?url=${encodeURIComponent(gitUrl)}`);
   };
 
+  const handleIframeLoad = useCallback(() => {
+    setIframeLoading(false);
+  }, []);
+
   const renderPreview = () => {
-    if (template.screenshotUrl && !screenshotError) {
+    const vercelUrl = template.vercelUrl?.trim();
+
+    if (vercelUrl) {
+      if (iframeError) {
+        return (
+          <div
+            className="w-full h-full flex flex-col items-center justify-center gap-4"
+            style={{ backgroundColor: '#0a0a0a', minHeight: '400px' }}
+          >
+            <div className="i-ph:warning-circle text-4xl text-[#9ca3af]" />
+            <p className="text-sm text-[#9ca3af]">This site cannot be previewed inline.</p>
+            <a
+              href={vercelUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-[#3b82f6] hover:bg-[#2563eb] text-white"
+            >
+              Open in New Tab →
+            </a>
+          </div>
+        );
+      }
+
       return (
-        <div
-          className="w-full h-full flex items-center justify-center"
-          style={{ backgroundColor: '#0a0a0a', minHeight: '400px' }}
-        >
-          <img
-            src={template.screenshotUrl}
-            alt={`${template.name} preview`}
-            className="max-w-full max-h-full object-contain"
-            onError={() => setScreenshotError(true)}
+        <div className="relative w-full h-full" style={{ backgroundColor: '#0a0a0a', minHeight: '400px' }}>
+          {iframeLoading && (
+            <div className="absolute inset-0 flex items-center justify-center" style={{ backgroundColor: '#0a0a0a' }}>
+              <div className="flex flex-col items-center gap-3">
+                <div className="w-8 h-8 border-2 border-[#3b82f6] border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm text-[#9ca3af]">Loading preview…</p>
+              </div>
+            </div>
+          )}
+          <iframe
+            src={vercelUrl}
+            title={`${template.name} live preview`}
+            className="w-full h-full min-h-[400px] border-0"
+            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+            onLoad={handleIframeLoad}
+            onError={() => setIframeError(true)}
           />
         </div>
       );
@@ -80,44 +177,25 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({ temp
       >
         <div className={`${template.icon} text-5xl text-cyan-400`} />
         <p className="text-lg font-medium text-white">{template.name}</p>
-        {template.vercelUrl ? (
-          <>
-            <p className="text-sm" style={{ color: '#9ca3af' }}>
-              Click &quot;Preview&quot; to view the live site in a new tab
-            </p>
-            <a
-              href={template.vercelUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 text-sm font-medium transition-colors"
-              style={{ color: '#3b82f6' }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.color = '#60a5fa';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.color = '#3b82f6';
-              }}
-            >
-              Visit live site →
-            </a>
-          </>
-        ) : (
-          <p className="text-sm" style={{ color: '#9ca3af' }}>
-            Click &quot;Use Template&quot; to clone and customize this project
-          </p>
-        )}
+        <p className="text-sm text-[#9ca3af]">Clone to customize this project</p>
       </div>
     );
   };
+
+  const hasIframePreview = Boolean(template.vercelUrl?.trim()) && !iframeError;
 
   return (
     <div
       ref={overlayRef}
       onClick={handleOverlayClick}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="template-modal-title"
       className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6"
       style={{ backgroundColor: 'rgba(0, 0, 0, 0.7)', backdropFilter: 'blur(4px)' }}
     >
       <div
+        ref={modalRef}
         className="relative w-full max-w-4xl max-h-[90vh] rounded-xl overflow-hidden flex flex-col"
         style={{ backgroundColor: '#1a1a1a', border: '1px solid #333333' }}
       >
@@ -129,20 +207,17 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({ temp
           <div className="flex items-center gap-3 min-w-0">
             <div className={`${template.icon} text-xl text-cyan-400 flex-shrink-0`} />
             <div className="min-w-0">
-              <h2 className="text-lg font-semibold text-white truncate">{template.name}</h2>
+              <h2 id="template-modal-title" className="text-lg font-semibold text-white truncate">
+                {template.name}
+              </h2>
               <p className="text-sm text-[#9ca3af]">{CATEGORY_LABELS[template.category] || template.category}</p>
             </div>
           </div>
           <button
+            ref={closeButtonRef}
             onClick={onClose}
-            className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors flex-shrink-0"
-            style={{ backgroundColor: '#2a2a2a' }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.backgroundColor = '#333333';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.backgroundColor = '#2a2a2a';
-            }}
+            aria-label="Close preview"
+            className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors flex-shrink-0 bg-[#2a2a2a] hover:bg-[#333333]"
           >
             <div className="i-ph:x text-lg text-[#9ca3af]" />
           </button>
@@ -171,32 +246,18 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({ temp
             ))}
           </div>
           <div className="flex items-center gap-2 flex-shrink-0 ml-4">
-            {template.vercelUrl && (
+            {template.vercelUrl?.trim() && (
               <button
                 onClick={handlePreview}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-                style={{ backgroundColor: '#2a2a2a', color: '#ffffff', border: '1px solid #333333' }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.backgroundColor = '#333333';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.backgroundColor = '#2a2a2a';
-                }}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-[#2a2a2a] hover:bg-[#333333] text-white border border-[#333333]"
               >
-                <div className="i-ph:eye text-base" />
-                Preview
+                <div className={hasIframePreview ? 'i-ph:arrow-square-out text-base' : 'i-ph:eye text-base'} />
+                {hasIframePreview ? 'Open in Browser' : 'Preview'}
               </button>
             )}
             <button
               onClick={handleUseTemplate}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-              style={{ backgroundColor: '#3b82f6', color: '#ffffff' }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = '#2563eb';
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = '#3b82f6';
-              }}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-[#3b82f6] hover:bg-[#2563eb] text-white"
             >
               <div className="i-ph:code text-base" />
               Use Template
