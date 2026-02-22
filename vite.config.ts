@@ -8,8 +8,6 @@ import { optimizeCssModules } from 'vite-plugin-optimize-css-modules';
 import tsconfigPaths from 'vite-tsconfig-paths';
 
 export default defineConfig((config) => {
-  const isTest = !!process.env.VITEST;
-
   return {
     server: {
       fs: {
@@ -52,25 +50,17 @@ export default defineConfig((config) => {
       ],
     },
     plugins: [
-      /*
-       * Skip heavy plugins during test runs — Remix, UnoCSS, and nodePolyfills
-       * start background processes / dev servers that prevent the Vitest process
-       * from exiting cleanly, causing VS Code's test runner to hang on
-       * "Starting test run..." after tests complete.
-       * tsconfigPaths is kept so ~ path aliases still resolve in specs.
-       */
-      !isTest &&
-        nodePolyfills({
-          include: ['buffer', 'process', 'util'],
-          globals: {
-            Buffer: true,
-            process: true,
-            global: true,
-          },
-          protocolImports: true,
-          exclude: ['child_process', 'fs', 'path', 'stream'],
-        }),
-      !isTest && {
+      nodePolyfills({
+        include: ['buffer', 'process', 'util'],
+        globals: {
+          Buffer: true,
+          process: true,
+          global: true,
+        },
+        protocolImports: true,
+        exclude: ['child_process', 'fs', 'path', 'stream'],
+      }),
+      {
         name: 'buffer-polyfill',
         transform(code: string, id: string) {
           if (id.includes('env.mjs')) {
@@ -83,16 +73,15 @@ export default defineConfig((config) => {
           return null;
         },
       },
-      !isTest &&
-        remixVitePlugin({
-          future: {
-            v3_fetcherPersist: true,
-            v3_relativeSplatPath: true,
-            v3_throwAbortReason: true,
-            v3_lazyRouteDiscovery: true,
-          },
-        }),
-      !isTest && UnoCSS(),
+      remixVitePlugin({
+        future: {
+          v3_fetcherPersist: true,
+          v3_relativeSplatPath: true,
+          v3_throwAbortReason: true,
+          v3_lazyRouteDiscovery: true,
+        },
+      }),
+      UnoCSS(),
       tsconfigPaths(),
       config.mode === 'production' && optimizeCssModules({ apply: 'build' }),
       process.env.ANALYZE
@@ -117,43 +106,6 @@ export default defineConfig((config) => {
         scss: {
           api: 'modern-compiler',
         },
-      },
-    },
-    test: {
-      pool: 'forks',
-      poolOptions: {
-        forks: {
-          execArgv: ['--max-old-space-size=8192'],
-        },
-      },
-      testTimeout: 30_000,
-      teardownTimeout: 3_000,
-      hookTimeout: 10_000,
-      fileParallelism: true,
-      watch: false,
-      passWithNoTests: true,
-      exclude: [
-        '**/node_modules/**',
-        '**/dist/**',
-        '**/cypress/**',
-        '**/.{idea,git,cache,output,temp}/**',
-        '**/{karma,rollup,webpack,vite,vitest,jest,ava,babel,nyc,cypress,tsup,build}.config.*',
-        '**/tests/preview/**',
-        '**/local-runtime.spec.ts',
-        '**/agentToolsService.spec.ts',
-      ],
-      coverage: {
-        provider: 'v8',
-        reporter: ['text', 'text-summary', 'html', 'lcov'],
-        reportsDirectory: './coverage',
-        include: ['app/**/*.{ts,tsx}'],
-        exclude: [
-          'app/**/*.spec.{ts,tsx}',
-          'app/**/*.test.{ts,tsx}',
-          'app/**/types/**',
-          'app/**/*.d.ts',
-          'app/entry.*.{ts,tsx}',
-        ],
       },
     },
     optimizeDeps: {

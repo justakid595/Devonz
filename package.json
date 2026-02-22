@@ -15,10 +15,6 @@
     "dev": "node pre-start.cjs  && remix vite:dev",
     "dev:clean": "node pre-start.cjs && node -e \"require('fs').rmSync('node_modules/.vite',{recursive:true,force:true})\" && remix vite:dev",
     "setup": "node scripts/setup.mjs",
-    "test": "vitest --run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest --run --coverage",
-    "test:integration": "vitest --run app/lib/runtime/local-runtime.spec.ts app/lib/services/agentToolsService.spec.ts",
     "lint": "eslint --cache --cache-location ./node_modules/.cache/eslint app",
     "lint:fix": "npm run lint -- --fix && prettier app --write",
     "start": "remix-serve ./build/server/index.js",
@@ -152,12 +148,10 @@
     "@types/react-dom": "^18.3.1",
     "@types/react-window": "^1.8.8",
     "@vitejs/plugin-react": "^4.3.4",
-    "@vitest/coverage-v8": "^2.1.9",
     "eslint-config-prettier": "^10.1.1",
     "eslint-plugin-prettier": "^5.2.6",
     "fast-glob": "^3.3.2",
     "husky": "9.1.7",
-    "jsdom": "^26.0.0",
     "lint-staged": "^16.2.7",
     "node-fetch": "^3.3.2",
     "playwright": "^1.58.2",
@@ -170,8 +164,7 @@
     "unocss": "^0.61.9",
     "vite": "^5.4.21",
     "vite-plugin-optimize-css-modules": "^1.1.0",
-    "vite-tsconfig-paths": "^4.3.2",
-    "vitest": "^2.1.7"
+    "vite-tsconfig-paths": "^4.3.2"
   },
   "lint-staged": {
     "app/**/*.{ts,tsx}": [
