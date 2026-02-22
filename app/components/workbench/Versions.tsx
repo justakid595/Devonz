@@ -688,7 +688,7 @@ export const Versions = memo(() => {
                       exit={{ opacity: 0, height: 0 }}
                       className="mb-2 rounded-lg text-xs overflow-hidden"
                       style={{
-                        background: 'var(--devonz-elements-bg-depth-3)',
+                        background: 'var(--devonz-elements-button-secondary-background)',
                         border: '1px solid var(--devonz-elements-borderColor)',
                       }}
                     >
