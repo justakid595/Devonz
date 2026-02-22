@@ -24,7 +24,7 @@ const logger = createScopedLogger('Database');
 // this is used at the top level and never rejects
 export async function openDatabase(): Promise<IDBDatabase | undefined> {
   if (typeof indexedDB === 'undefined') {
-    logger.error('indexedDB is not available in this environment.');
+    logger.debug('indexedDB is not available in this environment (expected on server).');
     return undefined;
   }
 

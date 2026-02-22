@@ -16,8 +16,8 @@ try {
     execSync = childProcess.execSync;
   }
 } catch {
-  // In Cloudflare environment, this will fail, which is expected
-  logger.info('Running in Cloudflare environment, child_process not available');
+  // child_process may not be available in edge/serverless environments
+  logger.debug('child_process not available — disk info will use fallback data');
 }
 
 // For development environments, we'll always provide mock data if real data isn't available
