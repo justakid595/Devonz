@@ -7,7 +7,7 @@
  * provided so consumers never need to cast or guess.
  */
 
-import type { ElementInfo } from './types';
+import type { ElementInfo, ThemeData } from './types';
 
 // ─── Screenshot Options ─────────────────────────────────────────────────────
 
@@ -24,6 +24,9 @@ export const INSPECTOR_COMMAND_TYPES = [
   'INSPECTOR_ACTIVATE',
   'INSPECTOR_EDIT_STYLE',
   'INSPECTOR_EDIT_TEXT',
+  'INSPECTOR_EDIT_ATTRIBUTE',
+  'INSPECTOR_EDIT_CSS_VAR',
+  'INSPECTOR_SCAN_THEME',
   'INSPECTOR_SELECT_BY_SELECTOR',
   'INSPECTOR_REVERT',
   'INSPECTOR_BULK_STYLE',
@@ -48,6 +51,9 @@ export const INSPECTOR_EVENT_TYPES = [
   'INSPECTOR_BULK_REVERTED',
   'INSPECTOR_ELEMENT_COUNT',
   'INSPECTOR_ELEMENT_DELETED',
+  'INSPECTOR_ATTRIBUTE_APPLIED',
+  'INSPECTOR_CSS_VAR_APPLIED',
+  'INSPECTOR_THEME_DATA',
   'PREVIEW_CONSOLE_ERROR',
   'PREVIEW_VITE_ERROR',
   'PREVIEW_SCREENSHOT_RESPONSE',
@@ -133,6 +139,25 @@ export interface CaptureScreenshotRequestCommand {
   options: ScreenshotOptions;
 }
 
+/** Set an HTML attribute on the currently selected element. */
+export interface EditAttributeCommand {
+  type: 'INSPECTOR_EDIT_ATTRIBUTE';
+  attribute: string;
+  value: string;
+}
+
+/** Edit a CSS custom property (variable) on `:root`. */
+export interface EditCSSVarCommand {
+  type: 'INSPECTOR_EDIT_CSS_VAR';
+  name: string;
+  value: string;
+}
+
+/** Request a full theme scan of the preview page. */
+export interface ScanThemeCommand {
+  type: 'INSPECTOR_SCAN_THEME';
+}
+
 /** Delete the currently selected element from the DOM. */
 export interface DeleteElementCommand {
   type: 'INSPECTOR_DELETE_ELEMENT';
@@ -146,6 +171,9 @@ export type InspectorCommand =
   | ActivateCommand
   | EditStyleCommand
   | EditTextCommand
+  | EditAttributeCommand
+  | EditCSSVarCommand
+  | ScanThemeCommand
   | SelectBySelectorCommand
   | RevertCommand
   | BulkStyleCommand
@@ -189,6 +217,12 @@ export interface ResizeEvent {
 export interface ResizeEndEvent {
   type: 'INSPECTOR_RESIZE_END';
   elementInfo: ElementInfo;
+
+  /** Element width (px) at the start of the drag. */
+  oldWidth: number;
+
+  /** Element height (px) at the start of the drag. */
+  oldHeight: number;
 }
 
 /** Confirmation that a single style edit was applied (or failed). */
@@ -251,6 +285,32 @@ export interface ElementDeletedEvent {
   error?: string;
 }
 
+/** Confirmation that an HTML attribute edit was applied (or failed). */
+export interface AttributeAppliedEvent {
+  type: 'INSPECTOR_ATTRIBUTE_APPLIED';
+  attribute: string;
+  value: string;
+  oldValue: string;
+  success: boolean;
+  error?: string;
+}
+
+/** Confirmation that a CSS variable edit was applied (or failed). */
+export interface CSSVarAppliedEvent {
+  type: 'INSPECTOR_CSS_VAR_APPLIED';
+  name: string;
+  value: string;
+  oldValue: string;
+  success: boolean;
+  error?: string;
+}
+
+/** Theme scan results from the preview page. */
+export interface ThemeDataEvent {
+  type: 'INSPECTOR_THEME_DATA';
+  theme: ThemeData;
+}
+
 /** Forwarded `window.onerror` / `console.error` from the preview app. */
 export interface ConsoleErrorEvent {
   type: 'PREVIEW_CONSOLE_ERROR';
@@ -300,6 +360,9 @@ export type InspectorEvent =
   | BulkRevertedEvent
   | ElementCountEvent
   | ElementDeletedEvent
+  | AttributeAppliedEvent
+  | CSSVarAppliedEvent
+  | ThemeDataEvent
   | ConsoleErrorEvent
   | ViteErrorEvent
   | ScreenshotResponseEvent;

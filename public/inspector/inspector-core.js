@@ -24,6 +24,9 @@ let resizeStartHeight = 0;
 let resizeHandle = null;
 let bulkOriginalStyles = new Map();
 
+/** @type {HTMLDivElement|null} Floating tooltip near cursor */
+let tooltipElement = null;
+
 /** @type {number} rAF handle for debounced hover messages */
 let _hoverRafId = 0;
 
@@ -70,6 +73,98 @@ function injectScrollbarStyles() {
 }
 
 injectScrollbarStyles();
+
+// ============================================================
+// Hover Tooltip
+// ============================================================
+
+function createTooltip() {
+  if (tooltipElement) {
+    return;
+  }
+
+  tooltipElement = document.createElement('div');
+  tooltipElement.className = 'inspector-tooltip';
+  tooltipElement.style.cssText =
+    'position: fixed;' +
+    'z-index: 1000000;' +
+    'pointer-events: none;' +
+    'background: rgba(15, 15, 15, 0.92);' +
+    'color: #e5e7eb;' +
+    'font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;' +
+    'font-size: 11px;' +
+    'line-height: 1.4;' +
+    'padding: 4px 8px;' +
+    'border-radius: 4px;' +
+    'border: 1px solid rgba(59, 130, 246, 0.5);' +
+    'white-space: nowrap;' +
+    'display: none;' +
+    'box-shadow: 0 2px 8px rgba(0,0,0,0.3);';
+
+  document.body.appendChild(tooltipElement);
+}
+
+function updateTooltip(clientX, clientY, element) {
+  if (!tooltipElement) {
+    return;
+  }
+
+  var tagName = element.tagName.toLowerCase();
+  var cn = getElementClassName(element);
+  var classes = cn.trim().split(/\s+/).filter(function (c) {
+    return c && !c.startsWith('inspector-');
+  });
+  var label = tagName;
+
+  if (element.id) {
+    label += '#' + element.id;
+  } else if (classes.length > 0) {
+    label += '.' + classes.slice(0, 2).join('.');
+  }
+
+  var rect = element.getBoundingClientRect();
+  var dims = Math.round(rect.width) + ' \u00D7 ' + Math.round(rect.height);
+
+  tooltipElement.innerHTML =
+    '<span style="color:#93c5fd;">' + label + '</span>' +
+    '<span style="color:#6b7280; margin: 0 4px;">\u2502</span>' +
+    '<span style="color:#a3e635;">' + dims + '</span>';
+
+  tooltipElement.style.display = 'block';
+
+  // Position: 12px below and right of cursor, flip if near viewport edge
+  var tipW = tooltipElement.offsetWidth;
+  var tipH = tooltipElement.offsetHeight;
+  var viewW = window.innerWidth;
+  var viewH = window.innerHeight;
+
+  var x = clientX + 12;
+  var y = clientY + 12;
+
+  if (x + tipW > viewW - 8) {
+    x = clientX - tipW - 8;
+  }
+
+  if (y + tipH > viewH - 8) {
+    y = clientY - tipH - 8;
+  }
+
+  tooltipElement.style.left = x + 'px';
+  tooltipElement.style.top = y + 'px';
+}
+
+function hideTooltip() {
+  if (tooltipElement) {
+    tooltipElement.style.display = 'none';
+  }
+}
+
+function destroyTooltip() {
+  if (tooltipElement) {
+    tooltipElement.remove();
+    tooltipElement = null;
+  }
+}
 
 // ============================================================
 // Helper: Send message to parent
@@ -415,7 +510,7 @@ function createElementInfo(element) {
   var rect = element.getBoundingClientRect();
   var computedStyles = window.getComputedStyle(element);
 
-  return {
+  var info = {
     tagName: element.tagName,
     className: getElementClassName(element),
     id: element.id || '',
@@ -436,6 +531,91 @@ function createElementInfo(element) {
     hierarchy: getElementHierarchy(element),
     colors: extractElementColors(element, computedStyles),
   };
+
+  // Image detection
+  var tagLower = element.tagName.toLowerCase();
+  var bgImage = computedStyles.getPropertyValue('background-image');
+  var hasBgImage = bgImage && bgImage !== 'none';
+
+  if (tagLower === 'img') {
+    info.isImage = true;
+    info.imageSrc = element.src || element.getAttribute('src') || '';
+    info.imageAlt = element.alt || element.getAttribute('alt') || '';
+    info.imageNaturalWidth = element.naturalWidth || 0;
+    info.imageNaturalHeight = element.naturalHeight || 0;
+  }
+
+  if (hasBgImage) {
+    info.isImage = true;
+    info.backgroundImage = bgImage;
+  }
+
+  // Source file detection (React devtools or data attributes)
+  var sourceFile = element.getAttribute('data-source-file') || '';
+  var sourceLine = element.getAttribute('data-source-line');
+
+  // Check React's __source prop (JSX dev transform)
+  if (!sourceFile && element.__source) {
+    sourceFile = element.__source.fileName || '';
+    sourceLine = element.__source.lineNumber;
+  }
+
+  // Check React fiber _debugSource (React 17+ dev mode)
+  if (!sourceFile) {
+    var fiberKey = Object.keys(element).find(function (k) {
+      return k.startsWith('__reactFiber$') || k.startsWith('__reactInternalInstance$');
+    });
+
+    if (fiberKey) {
+      var fiber = element[fiberKey];
+
+      // Walk up the fiber tree looking for _debugSource
+      var current = fiber;
+      var depth = 0;
+
+      while (current && depth < 10) {
+        if (current._debugSource) {
+          sourceFile = current._debugSource.fileName || '';
+          sourceLine = current._debugSource.lineNumber;
+
+          break;
+        }
+
+        current = current.return;
+        depth++;
+      }
+    }
+  }
+
+  // Walk up DOM ancestors for data-source-file (some frameworks add it to parents)
+  if (!sourceFile) {
+    var ancestor = element.parentElement;
+    var ancestorDepth = 0;
+
+    while (ancestor && ancestorDepth < 5) {
+      var ancestorSource = ancestor.getAttribute('data-source-file');
+
+      if (ancestorSource) {
+        sourceFile = ancestorSource;
+        sourceLine = ancestor.getAttribute('data-source-line');
+
+        break;
+      }
+
+      ancestor = ancestor.parentElement;
+      ancestorDepth++;
+    }
+  }
+
+  if (sourceFile) {
+    info.sourceFile = sourceFile;
+
+    if (sourceLine != null) {
+      info.sourceLine = parseInt(sourceLine, 10) || undefined;
+    }
+  }
+
+  return info;
 }
 
 function getElementUniqueId(element) {
@@ -481,7 +661,7 @@ function toCamelCase(property) {
 // ============================================================
 
 function handleMouseMove(e) {
-  if (!isInspectorActive) {
+  if (!isInspectorActive || isResizing) {
     return;
   }
 
@@ -491,13 +671,22 @@ function handleMouseMove(e) {
     return;
   }
 
+  // Don't highlight or tooltip the already-selected element
+  if (target === selectedElement) {
+    hideTooltip();
+    return;
+  }
+
   // Update visual highlight immediately for responsiveness
-  if (currentHighlight) {
+  if (currentHighlight && currentHighlight !== selectedElement) {
     currentHighlight.classList.remove('inspector-highlight');
   }
 
   target.classList.add('inspector-highlight');
   currentHighlight = target;
+
+  // Update hover tooltip near cursor
+  updateTooltip(e.clientX, e.clientY, target);
 
   // Debounce the expensive createElementInfo + postMessage to one per frame
   cancelAnimationFrame(_hoverRafId);
@@ -522,7 +711,24 @@ function handleClick(e) {
     return;
   }
 
+  // Clear previous selection class
+  var prevSelected = document.querySelector('.inspector-selected');
+
+  if (prevSelected) {
+    prevSelected.classList.remove('inspector-selected');
+  }
+
+  // Clear hover highlight since we're selecting
+  if (currentHighlight) {
+    currentHighlight.classList.remove('inspector-highlight');
+    currentHighlight = null;
+  }
+
   selectedElement = target;
+  target.classList.add('inspector-selected');
+
+  // Hide tooltip on selection (resize handles replace it)
+  hideTooltip();
 
   // Capture original styles for revert
   originalStyles = {};
@@ -549,6 +755,7 @@ function handleMouseLeave() {
     currentHighlight = null;
   }
 
+  hideTooltip();
   sendToParent('INSPECTOR_LEAVE', {});
 }
 
@@ -715,6 +922,9 @@ function handleResize(e) {
 }
 
 function stopResize() {
+  var oldWidth = resizeStartWidth;
+  var oldHeight = resizeStartHeight;
+
   isResizing = false;
   resizeHandle = null;
 
@@ -724,6 +934,8 @@ function stopResize() {
   if (selectedElement) {
     sendToParent('INSPECTOR_RESIZE_END', {
       elementInfo: createElementInfo(selectedElement),
+      oldWidth: oldWidth,
+      oldHeight: oldHeight,
     });
   }
 }
@@ -741,6 +953,11 @@ function setInspectorActive(active) {
       inspectorStyle.textContent =
         '.inspector-active * { cursor: crosshair !important; }' +
         '.inspector-highlight {' +
+        '  outline: 2px dashed #3b82f6 !important;' +
+        '  outline-offset: -2px !important;' +
+        '  background-color: rgba(59, 130, 246, 0.06) !important;' +
+        '}' +
+        '.inspector-selected {' +
         '  outline: 2px solid #3b82f6 !important;' +
         '  outline-offset: -2px !important;' +
         '  background-color: rgba(59, 130, 246, 0.1) !important;' +
@@ -755,6 +972,7 @@ function setInspectorActive(active) {
     }
 
     document.body.classList.add('inspector-active');
+    createTooltip();
 
     document.addEventListener('mousemove', handleMouseMove, true);
     document.addEventListener('click', handleClick, true);
@@ -767,7 +985,15 @@ function setInspectorActive(active) {
       currentHighlight = null;
     }
 
+    // Clear selection class
+    var prevSelected = document.querySelector('.inspector-selected');
+
+    if (prevSelected) {
+      prevSelected.classList.remove('inspector-selected');
+    }
+
     hideResizeHandles();
+    destroyTooltip();
 
     document.removeEventListener('mousemove', handleMouseMove, true);
     document.removeEventListener('click', handleClick, true);
@@ -845,6 +1071,41 @@ function handleTextEdit(text) {
   } catch (error) {
     sendToParent('INSPECTOR_TEXT_APPLIED', {
       text: text,
+      success: false,
+      error: error.message,
+    });
+  }
+}
+
+// ============================================================
+// Attribute Editing
+// ============================================================
+
+function handleAttributeEdit(attribute, value) {
+  if (!selectedElement) {
+    return;
+  }
+
+  try {
+    var oldValue = selectedElement.getAttribute(attribute) || '';
+    selectedElement.setAttribute(attribute, value);
+
+    // If we just changed <img src>, update the element info cache
+    if (attribute === 'src' && selectedElement.tagName === 'IMG') {
+      sendToParent('INSPECTOR_CLICK', { elementInfo: createElementInfo(selectedElement) });
+    }
+
+    sendToParent('INSPECTOR_ATTRIBUTE_APPLIED', {
+      attribute: attribute,
+      value: value,
+      oldValue: oldValue,
+      success: true,
+    });
+  } catch (error) {
+    sendToParent('INSPECTOR_ATTRIBUTE_APPLIED', {
+      attribute: attribute,
+      value: value,
+      oldValue: '',
       success: false,
       error: error.message,
     });
@@ -1082,6 +1343,261 @@ function handleDeleteElement() {
 }
 
 // ============================================================
+// CSS Variable Editing
+// ============================================================
+
+function handleEditCSSVar(name, value) {
+  try {
+    var root = document.documentElement;
+    var oldValue = getComputedStyle(root).getPropertyValue(name).trim();
+
+    root.style.setProperty(name, value);
+
+    sendToParent('INSPECTOR_CSS_VAR_APPLIED', {
+      name: name,
+      value: value,
+      oldValue: oldValue,
+      success: true,
+    });
+  } catch (error) {
+    sendToParent('INSPECTOR_CSS_VAR_APPLIED', {
+      name: name,
+      value: value,
+      oldValue: '',
+      success: false,
+      error: error.message,
+    });
+  }
+}
+
+// ============================================================
+// Theme Scanning
+// ============================================================
+
+/**
+ * Check if a CSS value represents a color.
+ * Matches hex, rgb(), rgba(), hsl(), hsla(), named colors.
+ */
+function looksLikeColor(value) {
+  if (!value || value === 'none' || value === 'inherit' || value === 'initial' || value === 'unset') {
+    return false;
+  }
+
+  if (/^#[0-9a-f]{3,8}$/i.test(value)) {
+    return true;
+  }
+
+  if (/^(rgb|hsl)a?\(/i.test(value)) {
+    return true;
+  }
+
+  // Named colors (common ones)
+  var namedColors = [
+    'red', 'blue', 'green', 'white', 'black', 'gray', 'grey',
+    'orange', 'purple', 'pink', 'yellow', 'cyan', 'magenta',
+    'transparent', 'currentcolor',
+  ];
+
+  return namedColors.indexOf(value.toLowerCase()) !== -1;
+}
+
+/**
+ * Scan the page for CSS custom properties, dominant colors, and fonts.
+ */
+function handleScanTheme() {
+  try {
+    var variables = [];
+    var colorMap = {};   // value → { count, properties Set }
+    var fontMap = {};     // family → { count, weights Set }
+
+    // 1. Scan CSS custom properties from all stylesheets
+    var root = document.documentElement;
+    var rootStyles = getComputedStyle(root);
+
+    // Collect variable names from stylesheets
+    var varNames = new Set();
+
+    try {
+      for (var s = 0; s < document.styleSheets.length; s++) {
+        var sheet = document.styleSheets[s];
+        var rules;
+
+        try {
+          rules = sheet.cssRules || sheet.rules;
+        } catch (e) {
+          // Cross-origin stylesheet — skip
+          continue;
+        }
+
+        if (!rules) {
+          continue;
+        }
+
+        for (var r = 0; r < rules.length; r++) {
+          var rule = rules[r];
+
+          // Only look at :root, html, body rules for variables
+          if (rule.selectorText &&
+              /^(:root|html|body)$/i.test(rule.selectorText.trim())) {
+            var style = rule.style;
+
+            for (var p = 0; p < style.length; p++) {
+              var prop = style[p];
+
+              if (prop.startsWith('--')) {
+                varNames.add(prop);
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // Stylesheet access error — continue with what we have
+    }
+
+    // Also check inline styles on :root/html/body
+    var inlineTargets = [document.documentElement, document.body];
+
+    for (var t = 0; t < inlineTargets.length; t++) {
+      var target = inlineTargets[t];
+
+      if (!target) {
+        continue;
+      }
+
+      var inlineStyle = target.style;
+
+      for (var ip = 0; ip < inlineStyle.length; ip++) {
+        if (inlineStyle[ip].startsWith('--')) {
+          varNames.add(inlineStyle[ip]);
+        }
+      }
+    }
+
+    // Resolve variable values and check usage
+    varNames.forEach(function (name) {
+      var value = rootStyles.getPropertyValue(name).trim();
+
+      if (!value) {
+        return;
+      }
+
+      variables.push({
+        name: name,
+        value: value,
+        isColor: looksLikeColor(value),
+        usageCount: 0, // Will be counted below
+      });
+    });
+
+    // 2. Scan all elements for colors, fonts, and variable usage
+    var allElements = document.querySelectorAll('*');
+    var colorProps = ['color', 'background-color', 'border-color'];
+
+    for (var i = 0; i < allElements.length; i++) {
+      var el = allElements[i];
+
+      // Skip inspector elements
+      if (el.classList.contains('inspector-highlight') ||
+          el.classList.contains('inspector-selected') ||
+          el.classList.contains('inspector-resize-handle') ||
+          el.id === 'inspector-tooltip') {
+        continue;
+      }
+
+      var computed = getComputedStyle(el);
+
+      // Colors
+      for (var c = 0; c < colorProps.length; c++) {
+        var colorVal = computed.getPropertyValue(colorProps[c]).trim();
+
+        if (colorVal && colorVal !== 'rgba(0, 0, 0, 0)' && colorVal !== 'transparent') {
+          if (!colorMap[colorVal]) {
+            colorMap[colorVal] = { count: 0, properties: {} };
+          }
+
+          colorMap[colorVal].count++;
+          colorMap[colorVal].properties[colorProps[c]] = true;
+        }
+      }
+
+      // Fonts
+      var fontFamily = computed.fontFamily.split(',')[0].trim().replace(/["']/g, '');
+      var fontWeight = computed.fontWeight;
+
+      if (fontFamily) {
+        if (!fontMap[fontFamily]) {
+          fontMap[fontFamily] = { count: 0, weights: {} };
+        }
+
+        fontMap[fontFamily].count++;
+        fontMap[fontFamily].weights[fontWeight] = true;
+      }
+
+      // Variable usage counting — check inline styles and attr for var() references
+      var inlineCSS = el.getAttribute('style') || '';
+      var classCSS = '';
+
+      // Simple approach: check if any variable name appears in style context
+      for (var v = 0; v < variables.length; v++) {
+        if (inlineCSS.indexOf('var(' + variables[v].name) !== -1) {
+          variables[v].usageCount++;
+        }
+      }
+    }
+
+    // 3. Convert maps to sorted arrays
+    var colors = [];
+    var colorKeys = Object.keys(colorMap);
+
+    for (var ck = 0; ck < colorKeys.length; ck++) {
+      var key = colorKeys[ck];
+      colors.push({
+        value: key,
+        count: colorMap[key].count,
+        properties: Object.keys(colorMap[key].properties),
+      });
+    }
+
+    // Sort by usage count descending, limit to top 20
+    colors.sort(function (a, b) { return b.count - a.count; });
+    colors = colors.slice(0, 20);
+
+    var fonts = [];
+    var fontKeys = Object.keys(fontMap);
+
+    for (var fk = 0; fk < fontKeys.length; fk++) {
+      var fKey = fontKeys[fk];
+      fonts.push({
+        family: fKey,
+        count: fontMap[fKey].count,
+        weights: Object.keys(fontMap[fKey].weights),
+      });
+    }
+
+    fonts.sort(function (a, b) { return b.count - a.count; });
+
+    sendToParent('INSPECTOR_THEME_DATA', {
+      theme: {
+        variables: variables,
+        colors: colors,
+        fonts: fonts,
+        timestamp: Date.now(),
+      },
+    });
+  } catch (error) {
+    sendToParent('INSPECTOR_THEME_DATA', {
+      theme: {
+        variables: [],
+        colors: [],
+        fonts: [],
+        timestamp: Date.now(),
+      },
+    });
+  }
+}
+
+// ============================================================
 // Message Dispatch (single listener, lookup map)
 // ============================================================
 
@@ -1094,6 +1610,15 @@ var commandHandlers = {
   },
   INSPECTOR_EDIT_TEXT: function (data) {
     handleTextEdit(data.text);
+  },
+  INSPECTOR_EDIT_ATTRIBUTE: function (data) {
+    handleAttributeEdit(data.attribute, data.value);
+  },
+  INSPECTOR_EDIT_CSS_VAR: function (data) {
+    handleEditCSSVar(data.name, data.value);
+  },
+  INSPECTOR_SCAN_THEME: function () {
+    handleScanTheme();
   },
   INSPECTOR_SELECT_BY_SELECTOR: function (data) {
     handleSelectBySelector(data.selector);

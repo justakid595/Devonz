@@ -7,6 +7,7 @@ import type {
   InspectorConfig,
   InspectorMode,
   InspectorTab,
+  ThemeData,
 } from '~/lib/inspector/types';
 import { DEFAULT_INSPECTOR_CONFIG } from '~/lib/inspector/types';
 import type { UseInspectorReturn } from '~/lib/hooks/useInspector';
@@ -63,6 +64,13 @@ export const accumulatedBulkChangesAtom =
 export const bulkAffectedCountAtom = import.meta.hot?.data.bulkAffectedCountAtom ?? atom<number | undefined>(undefined);
 
 /* ------------------------------------------------------------------ */
+/*  Theme data                                                         */
+/* ------------------------------------------------------------------ */
+
+/** Scanned theme data from the preview page (CSS variables, colors, fonts). */
+export const themeDataAtom = import.meta.hot?.data.themeDataAtom ?? atom<ThemeData | null>(null);
+
+/* ------------------------------------------------------------------ */
 /*  Config (persisted)                                                 */
 /* ------------------------------------------------------------------ */
 
@@ -100,6 +108,7 @@ if (import.meta.hot) {
   import.meta.hot.data.bulkTargetAtom = bulkTargetAtom;
   import.meta.hot.data.accumulatedBulkChangesAtom = accumulatedBulkChangesAtom;
   import.meta.hot.data.bulkAffectedCountAtom = bulkAffectedCountAtom;
+  import.meta.hot.data.themeDataAtom = themeDataAtom;
   import.meta.hot.data.inspectorConfigAtom = inspectorConfigAtom;
   import.meta.hot.data.inspectorApiAtom = inspectorApiAtom;
 }

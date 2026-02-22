@@ -1,4 +1,4 @@
-import { useState, useCallback, memo } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo, memo } from 'react';
 import type { BulkTarget } from '~/lib/inspector/types';
 
 interface BulkStyleSelectorProps {
@@ -77,6 +77,70 @@ const VALUE_TO_SELECTOR: Record<string, string> = {
 export const BulkStyleSelector = memo(
   ({ currentTagName, selectedTarget, onSelectTarget, affectedCount }: BulkStyleSelectorProps) => {
     const [isOpen, setIsOpen] = useState(false);
+    const [focusedIndex, setFocusedIndex] = useState(-1);
+    const dropdownRef = useRef<HTMLDivElement>(null);
+    const buttonRef = useRef<HTMLButtonElement>(null);
+
+    /* ── Flat options list for keyboard navigation ───────────────── */
+
+    const flatOptions = useMemo(() => {
+      const options: { value: string; label: string }[] = [];
+
+      for (const category of ELEMENT_CATEGORIES) {
+        for (const target of category.targets) {
+          options.push({ value: target.value, label: target.label });
+        }
+      }
+
+      if (currentTagName && !['html', 'body', 'head'].includes(currentTagName.toLowerCase())) {
+        options.push({ value: 'same-tag', label: `All <${currentTagName}>` });
+      }
+
+      return options;
+    }, [currentTagName]);
+
+    /* ── Close on outside click ──────────────────────────────────── */
+
+    useEffect(() => {
+      if (!isOpen) {
+        return undefined;
+      }
+
+      const handleMouseDown = (e: MouseEvent) => {
+        if (
+          dropdownRef.current &&
+          !dropdownRef.current.contains(e.target as Node) &&
+          buttonRef.current &&
+          !buttonRef.current.contains(e.target as Node)
+        ) {
+          setIsOpen(false);
+          setFocusedIndex(-1);
+        }
+      };
+
+      document.addEventListener('mousedown', handleMouseDown);
+
+      return () => document.removeEventListener('mousedown', handleMouseDown);
+    }, [isOpen]);
+
+    /* ── Reset focused index when dropdown opens ─────────────────── */
+
+    useEffect(() => {
+      if (isOpen) {
+        const currentValue = selectedTarget?.value ?? 'current';
+        const idx = flatOptions.findIndex((o) => o.value === currentValue);
+        setFocusedIndex(idx >= 0 ? idx : 0);
+      }
+    }, [isOpen, selectedTarget, flatOptions]);
+
+    /* ── Scroll focused option into view ─────────────────────────── */
+
+    useEffect(() => {
+      if (isOpen && focusedIndex >= 0 && focusedIndex < flatOptions.length) {
+        const el = document.getElementById(`bulk-option-${flatOptions[focusedIndex].value}`);
+        el?.scrollIntoView({ block: 'nearest' });
+      }
+    }, [isOpen, focusedIndex, flatOptions]);
 
     const handleSelect = useCallback(
       (value: string, label: string) => {
@@ -97,8 +161,62 @@ export const BulkStyleSelector = memo(
         }
 
         setIsOpen(false);
+        setFocusedIndex(-1);
       },
       [currentTagName, onSelectTarget],
+    );
+
+    /* ── Keyboard navigation ─────────────────────────────────────── */
+
+    const handleKeyDown = useCallback(
+      (e: React.KeyboardEvent) => {
+        if (!isOpen) {
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setIsOpen(true);
+          }
+
+          return;
+        }
+
+        switch (e.key) {
+          case 'ArrowDown':
+            e.preventDefault();
+            setFocusedIndex((prev) => (prev + 1) % flatOptions.length);
+            break;
+          case 'ArrowUp':
+            e.preventDefault();
+            setFocusedIndex((prev) => (prev - 1 + flatOptions.length) % flatOptions.length);
+            break;
+          case 'Home':
+            e.preventDefault();
+            setFocusedIndex(0);
+            break;
+          case 'End':
+            e.preventDefault();
+            setFocusedIndex(flatOptions.length - 1);
+            break;
+          case 'Enter':
+          case ' ':
+            e.preventDefault();
+
+            if (focusedIndex >= 0 && focusedIndex < flatOptions.length) {
+              const option = flatOptions[focusedIndex];
+              handleSelect(option.value, option.label);
+            }
+
+            break;
+          case 'Escape':
+            e.preventDefault();
+            setIsOpen(false);
+            setFocusedIndex(-1);
+            buttonRef.current?.focus();
+            break;
+          default:
+            break;
+        }
+      },
+      [isOpen, flatOptions, focusedIndex, handleSelect],
     );
 
     const displayLabel = selectedTarget ? selectedTarget.label : 'Current Element Only';
@@ -106,9 +224,25 @@ export const BulkStyleSelector = memo(
 
     return (
       <div className="relative">
+        <style>{`
+          @keyframes bulkDropdownIn {
+            from { opacity: 0; transform: translateY(-4px); }
+            to { opacity: 1; transform: translateY(0); }
+          }
+        `}</style>
+
         {/* Toggle Button */}
         <button
+          ref={buttonRef}
           onClick={() => setIsOpen(!isOpen)}
+          onKeyDown={handleKeyDown}
+          aria-haspopup="listbox"
+          aria-expanded={isOpen}
+          aria-activedescendant={
+            isOpen && focusedIndex >= 0 && focusedIndex < flatOptions.length
+              ? `bulk-option-${flatOptions[focusedIndex].value}`
+              : undefined
+          }
           className={`w-full flex items-center justify-between gap-2 px-2 py-1.5 text-xs font-medium rounded border transition-colors ${
             isBulkMode
               ? 'bg-purple-500/20 border-purple-500/50 text-purple-300 hover:bg-purple-500/30'
@@ -131,25 +265,39 @@ export const BulkStyleSelector = memo(
 
         {/* Dropdown */}
         {isOpen && (
-          <div className="absolute top-full left-0 right-0 mt-1 bg-devonz-elements-background-depth-2 border border-devonz-elements-borderColor rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+          <div
+            ref={dropdownRef}
+            role="listbox"
+            aria-label="Bulk style target"
+            className="absolute top-full left-0 right-0 mt-1 bg-devonz-elements-background-depth-2 border border-devonz-elements-borderColor rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto"
+            style={{ animation: 'bulkDropdownIn 150ms ease-out' }}
+          >
             {ELEMENT_CATEGORIES.map((category) => (
               <div key={category.category}>
                 <div className="px-2 py-1 text-[10px] font-semibold text-devonz-elements-textTertiary uppercase bg-devonz-elements-background-depth-3 sticky top-0">
                   {category.category}
                 </div>
-                {category.targets.map((target) => (
-                  <button
-                    key={target.value}
-                    onClick={() => handleSelect(target.value, target.label)}
-                    className={`w-full text-left px-3 py-1.5 text-xs hover:bg-devonz-elements-background-depth-3 transition-colors ${
-                      selectedTarget?.value === target.value || (target.value === 'current' && !selectedTarget)
-                        ? 'bg-accent-500/20 text-accent-400'
-                        : 'text-devonz-elements-textPrimary'
-                    }`}
-                  >
-                    {target.label}
-                  </button>
-                ))}
+                {category.targets.map((target) => {
+                  const isSelected =
+                    selectedTarget?.value === target.value || (target.value === 'current' && !selectedTarget);
+                  const isFocused =
+                    focusedIndex >= 0 &&
+                    focusedIndex < flatOptions.length &&
+                    flatOptions[focusedIndex].value === target.value;
+
+                  return (
+                    <button
+                      key={target.value}
+                      id={`bulk-option-${target.value}`}
+                      role="option"
+                      aria-selected={isSelected}
+                      onClick={() => handleSelect(target.value, target.label)}
+                      className={`w-full text-left px-3 py-1.5 text-xs hover:bg-devonz-elements-background-depth-3 transition-colors ${isSelected ? 'bg-accent-500/20 text-accent-400' : 'text-devonz-elements-textPrimary'} ${isFocused ? 'outline outline-1 outline-accent-400 bg-devonz-elements-background-depth-3' : ''}`}
+                    >
+                      {target.label}
+                    </button>
+                  );
+                })}
               </div>
             ))}
 
@@ -160,11 +308,20 @@ export const BulkStyleSelector = memo(
                   Same Type
                 </div>
                 <button
+                  id="bulk-option-same-tag"
+                  role="option"
+                  aria-selected={selectedTarget?.value === 'same-tag'}
                   onClick={() => handleSelect('same-tag', `All <${currentTagName}>`)}
                   className={`w-full text-left px-3 py-1.5 text-xs hover:bg-devonz-elements-background-depth-3 transition-colors ${
                     selectedTarget?.value === 'same-tag'
                       ? 'bg-accent-500/20 text-accent-400'
                       : 'text-devonz-elements-textPrimary'
+                  } ${
+                    focusedIndex >= 0 &&
+                    focusedIndex < flatOptions.length &&
+                    flatOptions[focusedIndex].value === 'same-tag'
+                      ? 'outline outline-1 outline-accent-400 bg-devonz-elements-background-depth-3'
+                      : ''
                   }`}
                 >
                   All &lt;{currentTagName.toLowerCase()}&gt; elements

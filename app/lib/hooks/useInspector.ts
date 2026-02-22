@@ -1,8 +1,9 @@
 /**
  * Central orchestrator hook for the Element Inspector system.
  *
- * Bridges the nanostore atoms (state), the message bridge (iframe comms),
- * and the keyboard shortcuts into a single, self-contained React hook.
+ * Composes the sub-hooks ({@link useInspectorMessages},
+ * {@link useInspectorKeyboard}, {@link useInspectorAI}) and the
+ * nanostore atoms into a single, self-contained React hook.
  * Components consume this hook instead of managing scattered `useState`
  * calls or raw `postMessage` interactions.
  *
@@ -13,17 +14,21 @@ import { useCallback, useEffect, useRef } from 'react';
 import { useStore } from '@nanostores/react';
 
 import type { BulkStyleChange, BulkTarget, ElementInfo, InspectorMode, InspectorTab } from '~/lib/inspector/types';
+import type { ThemeData } from '~/lib/inspector/types';
 import { RELEVANT_STYLE_PROPS } from '~/lib/inspector/types';
 
 import {
-  createMessageHandler,
   activateInspector,
   editStyle as sendEditStyle,
   editText as sendEditText,
+  editAttribute as sendEditAttribute,
+  editCSSVar as sendEditCSSVar,
+  scanTheme as sendScanTheme,
   selectBySelector,
   revertChanges,
   bulkEditStyle,
   bulkRevert as sendBulkRevert,
+  countElements,
   deleteElement,
 } from '~/lib/inspector/message-bridge';
 
@@ -40,11 +45,10 @@ import {
   bulkAffectedCountAtom,
   editHistoryAtom,
   editIndexAtom,
+  themeDataAtom,
   toggleInspectorMode,
-  selectElement,
   updatePendingStyle,
   clearPendingEdits,
-  pushEdit,
   undoEdit,
   redoEdit,
   addBulkChange,
@@ -52,15 +56,11 @@ import {
   clearAllBulkChanges,
 } from '~/lib/stores/inspector';
 
-import { getPreviewErrorHandler } from '~/utils/previewErrorHandler';
-
-// ─── Screenshot Callback Registry ──────────────────────────────────────────
-
-/**
- * Module-level map correlating screenshot request IDs to their resolution
- * callbacks. Shared across all hook instances (there should only be one).
- */
-const screenshotCallbacks = new Map<string, (dataUrl: string, isPlaceholder: boolean) => void>();
+import { useInspectorMessages } from './useInspectorMessages';
+import { useInspectorKeyboard } from './useInspectorKeyboard';
+import { useInspectorAI } from './useInspectorAI';
+import { workbenchStore } from '~/lib/stores/workbench';
+import { WORK_DIR } from '~/utils/constants';
 
 // ─── Public Interfaces ──────────────────────────────────────────────────────
 
@@ -91,6 +91,7 @@ export interface UseInspectorReturn {
   bulkAffectedCount: number | undefined;
   canUndo: boolean;
   canRedo: boolean;
+  themeData: ThemeData | null;
 
   // ── Actions ────────────────────────────────────────────────────────
   toggle: () => void;
@@ -98,6 +99,10 @@ export interface UseInspectorReturn {
   setActiveTab: (tab: InspectorTab) => void;
   editStyle: (property: string, value: string) => void;
   editText: (text: string) => void;
+  editAttribute: (attribute: string, value: string) => void;
+  editCSSVar: (name: string, value: string) => void;
+  scanTheme: () => void;
+  navigateToSource: (filePath: string, line?: number) => void;
   undo: () => void;
   redo: () => void;
   revert: () => void;
@@ -119,10 +124,11 @@ export interface UseInspectorReturn {
 /**
  * Central orchestrator hook for the Element Inspector.
  *
- * Subscribes to every relevant nanostore atom, forwards commands to the
- * preview iframe via the typed message bridge, and installs keyboard
- * shortcuts. All inspector-related state and actions are returned as a
- * single cohesive API surface.
+ * Subscribes to every relevant nanostore atom, delegates iframe message
+ * handling to {@link useInspectorMessages}, keyboard shortcuts to
+ * {@link useInspectorKeyboard}, and AI prompt construction to
+ * {@link useInspectorAI}. All inspector-related state and actions are
+ * returned as a single cohesive API surface.
  *
  * @param options - Iframe ref and optional callbacks.
  * @returns Reactive state and action functions.
@@ -144,192 +150,25 @@ export function useInspector(options: UseInspectorOptions): UseInspectorReturn {
   const bulkAffectedCount = useStore(bulkAffectedCountAtom);
   const editHistory = useStore(editHistoryAtom);
   const editIndex = useStore(editIndexAtom);
+  const themeData = useStore(themeDataAtom);
 
   const canUndoValue = editIndex >= 0;
   const canRedoValue = editIndex < editHistory.length - 1;
 
-  // Keep a stable ref to the latest callbacks so effects don't re-run.
-  const callbacksRef = useRef({ onAIAction, onSelectedElementChange });
-  callbacksRef.current = { onAIAction, onSelectedElementChange };
+  // Keep a stable ref to the latest selection callback.
+  const onSelectedElementChangeRef = useRef(onSelectedElementChange);
+  onSelectedElementChangeRef.current = onSelectedElementChange;
 
   // ── Notify external consumer of selection changes ──────────────────
 
   useEffect(() => {
-    callbacksRef.current.onSelectedElementChange?.(selectedElement);
+    onSelectedElementChangeRef.current?.(selectedElement);
   }, [selectedElement]);
 
-  // ── Iframe helper (safe access) ────────────────────────────────────
+  // ── Sub-hooks ──────────────────────────────────────────────────────
 
-  const getIframe = useCallback((): HTMLIFrameElement | null => {
-    return iframeRef.current;
-  }, [iframeRef]);
-
-  // ── Message listener (iframe → parent) ─────────────────────────────
-
-  useEffect(() => {
-    const handler = createMessageHandler({
-      onReady() {
-        const iframe = getIframe();
-
-        if (iframe) {
-          activateInspector(iframe, inspectorModeAtom.get() !== 'off');
-        }
-      },
-
-      onHover(event) {
-        hoveredElementAtom.set(event.elementInfo);
-      },
-
-      onLeave() {
-        hoveredElementAtom.set(null);
-      },
-
-      onClick(event) {
-        const element = event.elementInfo;
-
-        // Copy the display text to clipboard (best-effort)
-        navigator.clipboard.writeText(element.displayText).catch(() => {
-          /* Clipboard write failed — non-critical */
-        });
-
-        selectElement(element);
-      },
-
-      onResize(_event) {
-        /*
-         * Resize tracking — intentionally a no-op for now.
-         * Could be used for live dimension readouts in the future.
-         */
-      },
-
-      onResizeEnd(event) {
-        selectedElementAtom.set(event.elementInfo);
-      },
-
-      onEditApplied(event) {
-        if (event.success) {
-          const current = selectedElementAtom.get();
-
-          if (current) {
-            pushEdit({
-              kind: 'style',
-              edit: {
-                property: event.property,
-                oldValue: current.styles[event.property] ?? '',
-                newValue: event.value,
-                timestamp: Date.now(),
-              },
-              elementSelector: current.selector,
-            });
-          }
-        }
-      },
-
-      onTextApplied(event) {
-        if (event.success) {
-          const current = selectedElementAtom.get();
-
-          if (current) {
-            pushEdit({
-              kind: 'text',
-              edit: {
-                oldText: current.textContent,
-                newText: event.text,
-                timestamp: Date.now(),
-              },
-              elementSelector: current.selector,
-            });
-          }
-        }
-      },
-
-      onReverted(event) {
-        if (event.success) {
-          if (event.elementInfo) {
-            selectedElementAtom.set(event.elementInfo);
-          }
-
-          clearPendingEdits();
-        }
-      },
-
-      onBulkApplied(event) {
-        bulkAffectedCountAtom.set(event.count);
-      },
-
-      onBulkReverted(event) {
-        if (event.success) {
-          bulkAffectedCountAtom.set(event.count > 0 ? event.count : undefined);
-          removeBulkChangesForSelector(event.selector);
-        }
-      },
-
-      onElementCount(event) {
-        bulkAffectedCountAtom.set(event.count);
-      },
-
-      onElementDeleted(event) {
-        if (event.success) {
-          selectElement(null);
-        }
-      },
-
-      onConsoleError(event) {
-        let parsedUrl: URL;
-
-        try {
-          parsedUrl = new URL(event.url || globalThis.location.href);
-        } catch {
-          parsedUrl = new URL(globalThis.location.href);
-        }
-
-        getPreviewErrorHandler().handlePreviewMessage({
-          type: 'PREVIEW_UNCAUGHT_EXCEPTION',
-          message: event.message,
-          stack: event.stack,
-          pathname: parsedUrl.pathname,
-          search: parsedUrl.search,
-          hash: parsedUrl.hash,
-          port: 0,
-        });
-      },
-
-      onViteError(event) {
-        let parsedUrl: URL;
-
-        try {
-          parsedUrl = new URL(event.url || globalThis.location.href);
-        } catch {
-          parsedUrl = new URL(globalThis.location.href);
-        }
-
-        getPreviewErrorHandler().handlePreviewMessage({
-          type: 'PREVIEW_UNCAUGHT_EXCEPTION',
-          message: event.fullMessage || event.message,
-          stack: event.stack || '',
-          pathname: parsedUrl.pathname,
-          search: parsedUrl.search,
-          hash: parsedUrl.hash,
-          port: 0,
-        });
-      },
-
-      onScreenshotResponse(event) {
-        const callback = screenshotCallbacks.get(event.requestId);
-
-        if (callback) {
-          callback(event.dataUrl, event.isPlaceholder);
-          screenshotCallbacks.delete(event.requestId);
-        }
-      },
-    });
-
-    globalThis.addEventListener('message', handler);
-
-    return () => {
-      globalThis.removeEventListener('message', handler);
-    };
-  }, [getIframe]);
+  const { getIframe } = useInspectorMessages(iframeRef);
+  const { applyWithAI, applyBulkCSS } = useInspectorAI(onAIAction);
 
   // ── Actions ────────────────────────────────────────────────────────
 
@@ -385,6 +224,39 @@ export function useInspector(options: UseInspectorOptions): UseInspectorReturn {
     [getIframe],
   );
 
+  /** Set an HTML attribute on the currently selected element. */
+  const editAttribute = useCallback(
+    (attribute: string, value: string) => {
+      const iframe = getIframe();
+
+      if (iframe) {
+        sendEditAttribute(iframe, attribute, value);
+      }
+    },
+    [getIframe],
+  );
+
+  /** Edit a CSS custom property (variable) on :root. */
+  const editCSSVar = useCallback(
+    (name: string, value: string) => {
+      const iframe = getIframe();
+
+      if (iframe) {
+        sendEditCSSVar(iframe, name, value);
+      }
+    },
+    [getIframe],
+  );
+
+  /** Request a full theme scan of the preview page. */
+  const scanTheme = useCallback(() => {
+    const iframe = getIframe();
+
+    if (iframe) {
+      sendScanTheme(iframe);
+    }
+  }, [getIframe]);
+
   /** Undo the last edit, reverting the change inside the iframe. */
   const undo = useCallback(() => {
     const entry = undoEdit();
@@ -403,6 +275,8 @@ export function useInspector(options: UseInspectorOptions): UseInspectorReturn {
       sendEditStyle(iframe, entry.edit.property, entry.edit.oldValue);
     } else if (entry.kind === 'text') {
       sendEditText(iframe, entry.edit.oldText);
+    } else if (entry.kind === 'attribute') {
+      sendEditAttribute(iframe, entry.edit.attribute, entry.edit.oldValue);
     } else {
       revertChanges(iframe);
     }
@@ -426,6 +300,8 @@ export function useInspector(options: UseInspectorOptions): UseInspectorReturn {
       sendEditStyle(iframe, entry.edit.property, entry.edit.newValue);
     } else if (entry.kind === 'text') {
       sendEditText(iframe, entry.edit.newText);
+    } else if (entry.kind === 'attribute') {
+      sendEditAttribute(iframe, entry.edit.attribute, entry.edit.newValue);
     }
   }, [getIframe]);
 
@@ -540,63 +416,23 @@ export function useInspector(options: UseInspectorOptions): UseInspectorReturn {
     }
   }, []);
 
-  /**
-   * Build an AI prompt describing the pending changes and forward it to
-   * the consumer via the `onAIAction` callback.
-   */
-  const applyWithAI = useCallback(() => {
-    const element = selectedElementAtom.get();
-    const edits = pendingEditsAtom.get();
-    const textEdit = pendingTextEditAtom.get();
+  /** Set the bulk-edit target selector/label and request an element count. */
+  const setBulkTargetAction = useCallback(
+    (target: BulkTarget | null) => {
+      bulkTargetAtom.set(target);
 
-    if (!element) {
-      return;
-    }
+      if (target?.selector) {
+        const iframe = getIframe();
 
-    // Build a human-readable selector
-    const selectorParts = [element.tagName.toLowerCase()];
-
-    if (element.id) {
-      selectorParts.push(`#${element.id}`);
-    }
-
-    if (element.className) {
-      const firstClass = element.className.split(' ')[0];
-
-      if (firstClass) {
-        selectorParts.push(`.${firstClass}`);
+        if (iframe) {
+          countElements(iframe, target.selector);
+        }
+      } else {
+        bulkAffectedCountAtom.set(undefined);
       }
-    }
-
-    const selector = selectorParts.join('');
-
-    const changeLines: string[] = [];
-    const styleEntries = Object.entries(edits);
-
-    if (styleEntries.length > 0) {
-      changeLines.push('**Style changes:**');
-      styleEntries.forEach(([prop, value]) => {
-        changeLines.push(`- ${prop}: ${value}`);
-      });
-    }
-
-    if (textEdit) {
-      changeLines.push(`**Text content:** "${textEdit}"`);
-    }
-
-    const message = `Please apply these changes to the element \`${selector}\`:\n\n${changeLines.join('\n')}\n\nFind this element in the source code and update its styles/text accordingly.`;
-
-    callbacksRef.current.onAIAction?.(message);
-
-    // Close panel after dispatching
-    inspectorPanelVisibleAtom.set(false);
-    selectedElementAtom.set(null);
-  }, []);
-
-  /** Set the bulk-edit target selector/label. */
-  const setBulkTargetAction = useCallback((target: BulkTarget | null) => {
-    bulkTargetAtom.set(target);
-  }, []);
+    },
+    [getIframe],
+  );
 
   /** Apply a single bulk style change and forward to the iframe. */
   const bulkStyleChangeAction = useCallback(
@@ -626,47 +462,6 @@ export function useInspector(options: UseInspectorOptions): UseInspectorReturn {
     [getIframe],
   );
 
-  /**
-   * Generate a full CSS stylesheet from accumulated bulk changes and
-   * forward it to the AI via `onAIAction`.
-   */
-  const applyBulkCSS = useCallback(() => {
-    const changes = accumulatedBulkChangesAtom.get();
-
-    if (changes.length === 0) {
-      return;
-    }
-
-    // Group changes by selector for cleaner CSS output
-    const grouped: Record<string, Record<string, string>> = {};
-
-    for (const { selector, property, value } of changes) {
-      grouped[selector] ??= {};
-      grouped[selector][property] = value;
-    }
-
-    const cssRules = Object.entries(grouped)
-      .map(([sel, styles]) => {
-        const styleLines = Object.entries(styles)
-          .map(([prop, val]) => `  ${prop}: ${val} !important;`)
-          .join('\n');
-
-        return `${sel} {\n${styleLines}\n}`;
-      })
-      .join('\n\n');
-
-    const fullCSS = `/* Bulk Style Changes — Applied via Inspector */\n${cssRules}`;
-
-    const message = `Please add the following CSS rules to the project's main stylesheet (or create a new style block if needed):\n\n\`\`\`css\n${fullCSS}\n\`\`\`\n\nAdd these rules to style the elements as specified. The !important flags ensure these styles take precedence.`;
-
-    callbacksRef.current.onAIAction?.(message);
-
-    // Clear accumulated bulk state after dispatch
-    clearAllBulkChanges();
-    inspectorPanelVisibleAtom.set(false);
-    selectedElementAtom.set(null);
-  }, []);
-
   /** Clear all accumulated bulk changes and revert them in the iframe. */
   const clearBulkChangesAction = useCallback(() => {
     const changes = accumulatedBulkChangesAtom.get();
@@ -683,59 +478,28 @@ export function useInspector(options: UseInspectorOptions): UseInspectorReturn {
     clearAllBulkChanges();
   }, [getIframe]);
 
-  // ── Keyboard shortcuts ─────────────────────────────────────────────
+  /** Navigate to a source file in the code editor. */
+  const navigateToSource = useCallback((filePath: string, line?: number) => {
+    // Normalise the file path: strip leading slash if needed
+    const normalised = filePath.startsWith('/') ? filePath.slice(1) : filePath;
+    const fullPath = `${WORK_DIR}/${normalised}`;
 
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      const modifier = event.metaKey || event.ctrlKey;
+    // Switch to the code view and select the file
+    workbenchStore.currentView.set('code');
+    workbenchStore.setSelectedFile(fullPath);
 
-      // Ctrl/Cmd + Shift + C → toggle inspector
-      if (modifier && event.shiftKey && event.key === 'C') {
-        event.preventDefault();
-        toggle();
+    // If a line number is provided, scroll to it
+    if (line != null) {
+      workbenchStore.setCurrentDocumentScrollPosition({
+        line: Math.max(0, line - 1),
+        column: 0,
+      });
+    }
+  }, []);
 
-        return;
-      }
+  // ── Keyboard shortcuts (delegated to sub-hook) ─────────────────────
 
-      // Escape → close panel or deactivate
-      if (event.key === 'Escape') {
-        if (inspectorPanelVisibleAtom.get()) {
-          event.preventDefault();
-          closePanel();
-        } else if (inspectorModeAtom.get() !== 'off') {
-          event.preventDefault();
-          toggle();
-        }
-
-        return;
-      }
-
-      // Only handle undo/redo when the inspector panel is visible
-      if (!inspectorPanelVisibleAtom.get()) {
-        return;
-      }
-
-      // Ctrl/Cmd + Shift + Z → redo
-      if (modifier && event.shiftKey && event.key === 'Z') {
-        event.preventDefault();
-        redo();
-
-        return;
-      }
-
-      // Ctrl/Cmd + Z → undo
-      if (modifier && event.key === 'z') {
-        event.preventDefault();
-        undo();
-      }
-    };
-
-    globalThis.addEventListener('keydown', handleKeyDown);
-
-    return () => {
-      globalThis.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [toggle, closePanel, undo, redo]);
+  useInspectorKeyboard({ toggle, closePanel, undo, redo });
 
   // ── Return ─────────────────────────────────────────────────────────
 
@@ -753,6 +517,7 @@ export function useInspector(options: UseInspectorOptions): UseInspectorReturn {
     bulkAffectedCount,
     canUndo: canUndoValue,
     canRedo: canRedoValue,
+    themeData,
 
     // Actions
     toggle,
@@ -760,6 +525,10 @@ export function useInspector(options: UseInspectorOptions): UseInspectorReturn {
     setActiveTab,
     editStyle,
     editText,
+    editAttribute,
+    editCSSVar,
+    scanTheme,
+    navigateToSource,
     undo,
     redo,
     revert,

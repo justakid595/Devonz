@@ -78,6 +78,30 @@ export interface ElementInfo {
   elementPath?: string;
   hierarchy: ElementHierarchy | null;
   colors: string[];
+
+  /** `true` when the element is an `<img>` or has a CSS `background-image`. */
+  isImage?: boolean;
+
+  /** `src` attribute of an `<img>` element. */
+  imageSrc?: string;
+
+  /** `alt` attribute of an `<img>` element. */
+  imageAlt?: string;
+
+  /** Intrinsic width of an `<img>` element (pixels). */
+  imageNaturalWidth?: number;
+
+  /** Intrinsic height of an `<img>` element (pixels). */
+  imageNaturalHeight?: number;
+
+  /** Computed `background-image` value (when not `none`). */
+  backgroundImage?: string;
+
+  /** Source file path (from React devtools `__source` or `data-source-file`). */
+  sourceFile?: string;
+
+  /** Source line number. */
+  sourceLine?: number;
 }
 
 /* Inspector modes & tabs */
@@ -86,7 +110,7 @@ export interface ElementInfo {
 export type InspectorMode = 'off' | 'inspect' | 'select';
 
 /** Available detail-panel tabs. */
-export type InspectorTab = 'styles' | 'box' | 'ai';
+export type InspectorTab = 'styles' | 'box' | 'theme' | 'ai';
 
 /* Edits & history */
 
@@ -105,10 +129,19 @@ export interface TextEdit {
   timestamp: number;
 }
 
+/** An HTML attribute change with undo information. */
+export interface AttributeEdit {
+  attribute: string;
+  oldValue: string;
+  newValue: string;
+  timestamp: number;
+}
+
 /** Discriminated union for the undo / redo stack. */
 export type EditHistoryEntry =
   | { kind: 'style'; edit: StyleEdit; elementSelector: string }
   | { kind: 'text'; edit: TextEdit; elementSelector: string }
+  | { kind: 'attribute'; edit: AttributeEdit; elementSelector: string }
   | { kind: 'delete'; elementSelector: string; elementHtml: string; timestamp: number }
   | {
       kind: 'bulk-style';
@@ -191,3 +224,62 @@ export const RELEVANT_STYLE_PROPS = [
   'opacity',
   'overflow',
 ] as const;
+
+/* ─── Theme System ─────────────────────────────────────────────────── */
+
+/** A CSS custom property (variable) discovered in the page. */
+export interface CSSVariable {
+  /** Variable name including `--` prefix, e.g. `--primary-color`. */
+  name: string;
+
+  /** Current computed value. */
+  value: string;
+
+  /** Whether the value resolves to a color. */
+  isColor: boolean;
+
+  /**
+   * Usage count — how many elements reference this variable
+   * (via `var(--name)` in their computed/inline styles).
+   */
+  usageCount: number;
+}
+
+/** A dominant color extracted from the page. */
+export interface PageColor {
+  /** The color value (hex or rgb). */
+  value: string;
+
+  /** Number of elements using this color. */
+  count: number;
+
+  /** CSS properties where this color appears most (e.g. `color`, `background-color`). */
+  properties: string[];
+}
+
+/** A font family in use on the page. */
+export interface PageFont {
+  /** Font family name. */
+  family: string;
+
+  /** Number of elements using this font. */
+  count: number;
+
+  /** Font weights in use for this family. */
+  weights: string[];
+}
+
+/** Complete theme data scanned from the page. */
+export interface ThemeData {
+  /** CSS custom properties (variables) found in `:root` / `html` / `body`. */
+  variables: CSSVariable[];
+
+  /** Dominant colors used across the page. */
+  colors: PageColor[];
+
+  /** Font families in use. */
+  fonts: PageFont[];
+
+  /** Timestamp of the scan. */
+  timestamp: number;
+}

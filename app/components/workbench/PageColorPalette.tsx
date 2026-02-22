@@ -1,4 +1,4 @@
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, type KeyboardEvent } from 'react';
 import { createScopedLogger } from '~/utils/logger';
 import { toHex, isLightColor } from '~/utils/color';
 
@@ -63,20 +63,32 @@ export const PageColorPalette = memo(({ colors, onColorSelect }: PageColorPalett
               <button
                 onClick={() => handleCopyColor(color)}
                 onDoubleClick={() => handleSelectColor(color)}
+                onKeyDown={(e: KeyboardEvent<HTMLButtonElement>) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSelectColor(color);
+                  } else if (e.key === ' ') {
+                    e.preventDefault();
+                    handleCopyColor(color);
+                  }
+                }}
                 className="w-10 h-10 rounded-lg border-2 transition-all hover:scale-110 hover:shadow-lg relative group"
                 style={{
                   backgroundColor: color,
                   borderColor: isLight ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.2)',
                 }}
                 title={`${hex}\nClick to copy, double-click to use`}
+                aria-label={`Color ${hex}, click to copy, double-click to apply`}
               >
                 {isCopied && (
                   <span
+                    role="status"
+                    aria-live="polite"
                     className={`absolute inset-0 flex items-center justify-center text-xs font-bold ${
                       isLight ? 'text-gray-800' : 'text-white'
                     }`}
                   >
-                    ✓
+                    Copied!
                   </span>
                 )}
                 <span

@@ -51,6 +51,8 @@ export const BoxModelEditor = memo(({ boxModel, onValueChange }: BoxModelEditorP
   }
 
   const renderEditableValue = (field: string, value: number, textColor: string) => {
+    const [type, side] = field.split('-');
+
     if (editingField === field) {
       return (
         <input
@@ -60,6 +62,9 @@ export const BoxModelEditor = memo(({ boxModel, onValueChange }: BoxModelEditorP
           onBlur={() => handleEndEdit(field)}
           onKeyDown={(e) => handleKeyDown(e, field)}
           className="w-10 h-4 text-center text-[10px] bg-devonz-elements-background-depth-4 border border-devonz-elements-borderColor rounded focus:outline-none focus:border-accent-400"
+          aria-label={`${type} ${side} value`}
+          min={-9999}
+          max={9999}
           autoFocus
         />
       );
@@ -72,6 +77,7 @@ export const BoxModelEditor = memo(({ boxModel, onValueChange }: BoxModelEditorP
         onClick={() => handleStartEdit(field, value)}
         className={`text-[10px] font-mono hover:bg-devonz-elements-background-depth-4 px-1 rounded cursor-pointer transition-colors ${textColor}`}
         title={`Click to edit ${field}`}
+        aria-label={`Edit ${type} ${side} value`}
       >
         {displayValue}px
       </button>
@@ -79,7 +85,7 @@ export const BoxModelEditor = memo(({ boxModel, onValueChange }: BoxModelEditorP
   };
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3" role="region" aria-label="Box model visualization">
       {/* Visual Box Model */}
       <div className="relative">
         {/* Margin Layer (outermost - orange) */}

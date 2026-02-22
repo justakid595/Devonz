@@ -24,6 +24,9 @@ import type {
   BulkRevertedEvent,
   ElementCountEvent,
   ElementDeletedEvent,
+  AttributeAppliedEvent,
+  CSSVarAppliedEvent,
+  ThemeDataEvent,
   ConsoleErrorEvent,
   ViteErrorEvent,
   ScreenshotResponseEvent,
@@ -48,6 +51,9 @@ export interface InspectorEventHandlers {
   onBulkReverted: (event: BulkRevertedEvent) => void;
   onElementCount: (event: ElementCountEvent) => void;
   onElementDeleted: (event: ElementDeletedEvent) => void;
+  onAttributeApplied: (event: AttributeAppliedEvent) => void;
+  onCSSVarApplied: (event: CSSVarAppliedEvent) => void;
+  onThemeData: (event: ThemeDataEvent) => void;
   onConsoleError: (event: ConsoleErrorEvent) => void;
   onViteError: (event: ViteErrorEvent) => void;
   onScreenshotResponse: (event: ScreenshotResponseEvent) => void;
@@ -97,6 +103,9 @@ export function createMessageHandler(handlers: Partial<InspectorEventHandlers>):
     INSPECTOR_BULK_REVERTED: (e) => handlers.onBulkReverted?.(e as BulkRevertedEvent),
     INSPECTOR_ELEMENT_COUNT: (e) => handlers.onElementCount?.(e as ElementCountEvent),
     INSPECTOR_ELEMENT_DELETED: (e) => handlers.onElementDeleted?.(e as ElementDeletedEvent),
+    INSPECTOR_ATTRIBUTE_APPLIED: (e) => handlers.onAttributeApplied?.(e as AttributeAppliedEvent),
+    INSPECTOR_CSS_VAR_APPLIED: (e) => handlers.onCSSVarApplied?.(e as CSSVarAppliedEvent),
+    INSPECTOR_THEME_DATA: (e) => handlers.onThemeData?.(e as ThemeDataEvent),
     PREVIEW_CONSOLE_ERROR: (e) => handlers.onConsoleError?.(e as ConsoleErrorEvent),
     PREVIEW_VITE_ERROR: (e) => handlers.onViteError?.(e as ViteErrorEvent),
     PREVIEW_SCREENSHOT_RESPONSE: (e) => handlers.onScreenshotResponse?.(e as ScreenshotResponseEvent),
@@ -144,6 +153,37 @@ export function editStyle(iframe: HTMLIFrameElement, property: string, value: st
  */
 export function editText(iframe: HTMLIFrameElement, text: string): boolean {
   return sendCommand(iframe, { type: 'INSPECTOR_EDIT_TEXT', text });
+}
+
+/**
+ * Set an HTML attribute on the currently selected element.
+ *
+ * @param iframe    - Target preview iframe.
+ * @param attribute - Attribute name (e.g. `"src"`, `"alt"`).
+ * @param value     - New attribute value.
+ */
+export function editAttribute(iframe: HTMLIFrameElement, attribute: string, value: string): boolean {
+  return sendCommand(iframe, { type: 'INSPECTOR_EDIT_ATTRIBUTE', attribute, value });
+}
+
+/**
+ * Edit a CSS custom property (variable) on `:root`.
+ *
+ * @param iframe - Target preview iframe.
+ * @param name   - Variable name including `--` prefix.
+ * @param value  - New variable value.
+ */
+export function editCSSVar(iframe: HTMLIFrameElement, name: string, value: string): boolean {
+  return sendCommand(iframe, { type: 'INSPECTOR_EDIT_CSS_VAR', name, value });
+}
+
+/**
+ * Request a theme scan of the preview page.
+ *
+ * @param iframe - Target preview iframe.
+ */
+export function scanTheme(iframe: HTMLIFrameElement): boolean {
+  return sendCommand(iframe, { type: 'INSPECTOR_SCAN_THEME' });
 }
 
 /**

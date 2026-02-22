@@ -1,5 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
 
 /**
  * Ordered list of inspector module files that get concatenated into a single IIFE.
@@ -65,4 +68,29 @@ export function getInspectorScript(): string {
  */
 export function isInspectorAvailable(): boolean {
   return getInspectorScript().length > 0;
+}
+
+/* ── html2canvas local bundle ───────────────────────────────────────────── */
+
+let cachedHtml2Canvas = '';
+let hasLoadedHtml2Canvas = false;
+
+/**
+ * Reads the minified html2canvas bundle from `node_modules` and caches it.
+ * Returns the script content as a string, or an empty string if the file
+ * cannot be resolved (e.g. missing dependency).
+ */
+export function getHtml2CanvasScript(): string {
+  if (!hasLoadedHtml2Canvas) {
+    try {
+      const html2canvasPath = require.resolve('html2canvas/dist/html2canvas.min.js');
+      cachedHtml2Canvas = readFileSync(html2canvasPath, 'utf-8');
+    } catch {
+      cachedHtml2Canvas = '';
+    }
+
+    hasLoadedHtml2Canvas = true;
+  }
+
+  return cachedHtml2Canvas;
 }
