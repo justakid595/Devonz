@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { json, type MetaFunction } from '@remix-run/node';
-import { useSearchParams, useNavigate } from '@remix-run/react';
+import { useSearchParams, Link } from '@remix-run/react';
 import { ClientOnly } from 'remix-utils/client-only';
 import { Header } from '~/components/header/Header';
 import type { ShowcaseTemplate, TemplateCategory } from '~/types/showcase-template';
@@ -23,7 +23,6 @@ export const loader = () => json({});
 
 function TemplatesGallery() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const navigate = useNavigate();
   const [templates, setTemplates] = useState<ShowcaseTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeCategory, setActiveCategory] = useState<TemplateCategory | 'all'>('all');
@@ -82,10 +81,6 @@ function TemplatesGallery() {
     setSelectedTemplate(template);
   }, []);
 
-  const handleBackHome = useCallback(() => {
-    navigate('/');
-  }, [navigate]);
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -98,14 +93,22 @@ function TemplatesGallery() {
     <div className="flex-1 overflow-y-auto modern-scrollbar" style={{ backgroundColor: '#0a0a0a' }}>
       {/* Hero Section */}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-8 pb-6">
-        <div className="flex items-center gap-3 mb-2">
-          <button
-            onClick={handleBackHome}
-            className="flex items-center gap-1 text-sm text-[#9ca3af] hover:text-white transition-colors"
+        <div className="flex items-center gap-3 mb-4">
+          <Link
+            to="/"
+            prefetch="intent"
+            className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-sm font-medium no-underline transition-all duration-200 group border border-[#333333] hover:border-[#555555] hover:bg-[#2a2a2a]"
+            style={{ color: '#9ca3af', backgroundColor: '#1a1a1a' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = '#ffffff';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = '#9ca3af';
+            }}
           >
-            <div className="i-ph:arrow-left text-base" />
-            Back
-          </button>
+            <div className="i-ph:arrow-left text-base transition-transform duration-200 group-hover:-translate-x-0.5" />
+            Back to Home
+          </Link>
         </div>
         <h1 className="text-3xl font-bold text-white mb-2">Templates</h1>
         <p className="text-base text-[#9ca3af]">

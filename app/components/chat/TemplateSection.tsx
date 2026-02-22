@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from '@remix-run/react';
+import { Link, useNavigate } from '@remix-run/react';
 import type { ShowcaseTemplate } from '~/types/showcase-template';
 import type { TemplateCategory } from '~/types/showcase-template';
 import { loadShowcaseTemplates } from '~/utils/showcase-templates';
@@ -203,9 +203,10 @@ export const TemplateSection: React.FC = () => {
 
       {/* View all button — below carousel */}
       <div className="flex justify-center mt-3">
-        <button
-          onClick={() => navigate('/templates')}
-          className="text-xs font-medium px-3 py-1.5 rounded-lg transition-all duration-200 flex items-center gap-1.5 group border border-[#333333] hover:border-[#555555] hover:bg-[#2a2a2a]"
+        <Link
+          to="/templates"
+          prefetch="intent"
+          className="text-xs font-medium px-3 py-1.5 rounded-lg transition-all duration-200 flex items-center gap-1.5 group border border-[#333333] hover:border-[#555555] hover:bg-[#2a2a2a] no-underline"
           style={{ color: '#9ca3af', backgroundColor: '#1a1a1a' }}
           onMouseEnter={(e) => {
             e.currentTarget.style.color = '#ffffff';
@@ -214,9 +215,9 @@ export const TemplateSection: React.FC = () => {
             e.currentTarget.style.color = '#9ca3af';
           }}
         >
-          View all
+          View All Templates
           <div className="i-ph:arrow-right text-xs transition-transform duration-200 group-hover:translate-x-0.5" />
-        </button>
+        </Link>
       </div>
     </div>
   );
