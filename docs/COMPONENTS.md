@@ -45,7 +45,6 @@ The primary user interaction surface. Handles message display, input, file uploa
 | `LLMApiAlert.tsx` | LLM API error alerts |
 | `SupabaseAlert.tsx` | Supabase connection alerts |
 | `ChatModeSelector.tsx` | Unified Build/Plan/Discuss mode selector (Radix Popover) — replaces separate Plan and Discuss toggles |
-| `DicussMode.tsx` | Discuss (non-coding) mode |
 | `MCPTools.tsx` | MCP tools indicator in the chat toolbar; MCP tool selection |
 | `AgentToggle.tsx` | Agent mode toggle control |
 | `artifact-utils.ts` | Utility functions for artifact processing |

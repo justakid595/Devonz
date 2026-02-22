@@ -1,15 +1,6 @@
 import { useCallback } from 'react';
 import { toast as toastify } from 'react-toastify';
 
-// Configure standard toast settings
-export const configuredToast = {
-  success: (message: string, options = {}) => toastify.success(message, { autoClose: 3000, ...options }),
-  error: (message: string, options = {}) => toastify.error(message, { autoClose: 3000, ...options }),
-  info: (message: string, options = {}) => toastify.info(message, { autoClose: 3000, ...options }),
-  warning: (message: string, options = {}) => toastify.warning(message, { autoClose: 3000, ...options }),
-  loading: (message: string, options = {}) => toastify.loading(message, { autoClose: 3000, ...options }),
-};
-
 // Export the original toast for cases where specific configuration is needed
 export { toastify as toast };
 

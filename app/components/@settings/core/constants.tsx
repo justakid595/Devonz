@@ -79,24 +79,6 @@ export const TAB_LABELS: Record<TabType, string> = {
   'project-memory': 'Project Memory',
 };
 
-export const TAB_DESCRIPTIONS: Record<TabType, string> = {
-  profile: 'Manage your profile and account settings',
-  settings: 'Configure application preferences',
-  notifications: 'View and manage your notifications',
-  features: 'Explore new and upcoming features',
-  data: 'Manage your data and storage',
-  'cloud-providers': 'Configure cloud AI providers and models',
-  'local-providers': 'Configure local AI providers and models',
-  github: 'Connect and manage GitHub integration',
-  gitlab: 'Connect and manage GitLab integration',
-  netlify: 'Configure Netlify deployment settings',
-  vercel: 'Manage Vercel projects and deployments',
-  supabase: 'Setup Supabase database connection',
-  'event-logs': 'View system events and logs',
-  mcp: 'Configure MCP (Model Context Protocol) servers',
-  'project-memory': 'Persistent AI instructions for this project',
-};
-
 export const DEFAULT_TAB_CONFIG = [
   // User Window Tabs (Always visible by default)
   { id: 'features', visible: true, window: 'user' as const, order: 0 },
