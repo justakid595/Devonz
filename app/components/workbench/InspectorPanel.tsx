@@ -13,12 +13,12 @@ import { useState, useCallback, useRef, useEffect, memo } from 'react';
 import type { UseInspectorReturn } from '~/lib/hooks/useInspector';
 import type { InspectorTab } from '~/lib/inspector/types';
 import { setPendingChatMessage } from '~/lib/stores/chat';
-import { sanitizeForPrompt, sanitizeSelectorPart } from '~/utils/sanitize';
+import { sanitizeForPrompt } from '~/utils/sanitize';
+import { buildElementSelector } from '~/utils/selector';
+import { COPY_FEEDBACK_TIMEOUT_MS, TEXT_PREVIEW_LENGTH } from '~/lib/inspector/constants';
 import { BulkStyleSelector } from './BulkStyleSelector';
 import { ThemeEditor } from './ThemeEditor';
-import { StylesTabContent } from './inspector/StylesTabContent';
-import { BoxTabContent } from './inspector/BoxTabContent';
-import { AiTabContent } from './inspector/AITabContent';
+import { StylesTabContent, BoxTabContent, AiTabContent } from './inspector';
 
 /* ─── Tab config ───────────────────────────────────────────────────── */
 
@@ -127,7 +127,7 @@ export const InspectorPanel = memo(({ inspector }: InspectorPanelProps) => {
       clearTimeout(copyFeedbackTimeoutRef.current);
     }
 
-    copyFeedbackTimeoutRef.current = setTimeout(() => setCopyFeedback(null), 2000);
+    copyFeedbackTimeoutRef.current = setTimeout(() => setCopyFeedback(null), COPY_FEEDBACK_TIMEOUT_MS);
   }, [inspector]);
 
   const handleCopyAllStyles = useCallback(async () => {
@@ -138,7 +138,7 @@ export const InspectorPanel = memo(({ inspector }: InspectorPanelProps) => {
       clearTimeout(copyFeedbackTimeoutRef.current);
     }
 
-    copyFeedbackTimeoutRef.current = setTimeout(() => setCopyFeedback(null), 2000);
+    copyFeedbackTimeoutRef.current = setTimeout(() => setCopyFeedback(null), COPY_FEEDBACK_TIMEOUT_MS);
   }, [inspector]);
 
   /* ── Revert routing ────────────────────────────────────────────── */
@@ -168,25 +168,14 @@ export const InspectorPanel = memo(({ inspector }: InspectorPanelProps) => {
       return;
     }
 
-    const sanitizedTag = sanitizeSelectorPart(selectedElement.tagName.toLowerCase());
-    const selectorParts = [sanitizedTag];
+    const selector = buildElementSelector(selectedElement);
 
-    if (selectedElement.id) {
-      selectorParts.push(`#${sanitizeSelectorPart(selectedElement.id)}`);
-    }
-
-    if (selectedElement.className) {
-      const firstClass = selectedElement.className.split(' ')[0];
-
-      if (firstClass) {
-        selectorParts.push(`.${sanitizeSelectorPart(firstClass)}`);
-      }
-    }
-
-    const selector = selectorParts.join('');
-    const textPreview = sanitizeForPrompt(selectedElement.textContent?.slice(0, 50) || '', 50);
+    const textPreview = sanitizeForPrompt(
+      selectedElement.textContent?.slice(0, TEXT_PREVIEW_LENGTH) || '',
+      TEXT_PREVIEW_LENGTH,
+    );
     const textContext = textPreview
-      ? ` with text "${textPreview}${selectedElement.textContent && selectedElement.textContent.length > 50 ? '...' : ''}"`
+      ? ` with text "${textPreview}${selectedElement.textContent && selectedElement.textContent.length > TEXT_PREVIEW_LENGTH ? '...' : ''}"`
       : '';
 
     const message = `Please delete/remove the element \`${selector}\`${textContext} from the source code.\n\nRemove this element completely from the JSX/HTML.`;

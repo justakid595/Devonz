@@ -1,6 +1,7 @@
 import { memo, useState, useCallback, useMemo, useRef, useEffect, type KeyboardEvent } from 'react';
 import { createScopedLogger } from '~/utils/logger';
 import { toHex, isLightColor } from '~/utils/color';
+import { COLOR_COPY_TIMEOUT_MS, COPY_FEEDBACK_TIMEOUT_MS, MAX_PALETTE_COLORS } from '~/lib/inspector/constants';
 
 const logger = createScopedLogger('ColorPalette');
 
@@ -28,7 +29,7 @@ export const PageColorPalette = memo(({ colors, onColorSelect }: PageColorPalett
     try {
       await navigator.clipboard.writeText(hex);
       setCopiedColor(hex);
-      setTimeout(() => setCopiedColor(null), 1500);
+      setTimeout(() => setCopiedColor(null), COLOR_COPY_TIMEOUT_MS);
     } catch {
       logger.error('Failed to copy color');
     }
@@ -44,7 +45,7 @@ export const PageColorPalette = memo(({ colors, onColorSelect }: PageColorPalett
         clearTimeout(appliedTimerRef.current);
       }
 
-      appliedTimerRef.current = setTimeout(() => setAppliedColor(null), 2000);
+      appliedTimerRef.current = setTimeout(() => setAppliedColor(null), COPY_FEEDBACK_TIMEOUT_MS);
     },
     [onColorSelect],
   );
@@ -59,7 +60,7 @@ export const PageColorPalette = memo(({ colors, onColorSelect }: PageColorPalett
   }
 
   // Deduplicate and limit colors
-  const uniqueColors = useMemo(() => [...new Set(colors.map((c) => toHex(c)))].slice(0, 16), [colors]);
+  const uniqueColors = useMemo(() => [...new Set(colors.map((c) => toHex(c)))].slice(0, MAX_PALETTE_COLORS), [colors]);
 
   return (
     <div className="space-y-3">

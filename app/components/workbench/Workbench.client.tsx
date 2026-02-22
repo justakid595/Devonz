@@ -253,11 +253,11 @@ export const Workbench = memo(
       chatStarted &&
       showWorkbench && (
         <div
-          className={classNames('h-full z-workbench', {
+          className={classNames('h-full z-workbench min-w-0', {
             'flex-grow': !!fullWidth,
             'flex-shrink-0': !fullWidth,
           })}
-          style={fullWidth ? undefined : { width: width || 'var(--workbench-width)' }}
+          style={fullWidth ? undefined : { width: width || 'var(--workbench-width)', maxWidth: '100%' }}
         >
           <div
             className={classNames('h-full flex flex-col bg-devonz-elements-background-depth-2 overflow-hidden', {

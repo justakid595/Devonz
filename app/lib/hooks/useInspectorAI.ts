@@ -18,7 +18,8 @@ import {
   clearAllBulkChanges,
 } from '~/lib/stores/inspector';
 
-import { sanitizeSelectorPart, sanitizeCSSValue } from '~/utils/sanitize';
+import { sanitizeCSSValue } from '~/utils/sanitize';
+import { buildElementSelector } from '~/utils/selector';
 
 // ─── Return Interface ──────────────────────────────────────────────────────
 
@@ -60,22 +61,7 @@ export function useInspectorAI(onAIAction: ((message: string) => void) | undefin
     }
 
     // Build a human-readable selector (sanitised)
-    const sanitizedTag = sanitizeSelectorPart(element.tagName.toLowerCase());
-    const selectorParts = [sanitizedTag];
-
-    if (element.id) {
-      selectorParts.push(`#${sanitizeSelectorPart(element.id)}`);
-    }
-
-    if (element.className) {
-      const firstClass = element.className.split(' ')[0];
-
-      if (firstClass) {
-        selectorParts.push(`.${sanitizeSelectorPart(firstClass)}`);
-      }
-    }
-
-    const selector = selectorParts.join('');
+    const selector = buildElementSelector(element);
 
     const changeLines: string[] = [];
     const styleEntries = Object.entries(edits);

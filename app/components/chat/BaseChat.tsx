@@ -418,15 +418,15 @@ export const BaseChat = React.memo(
       const baseChat = (
         <div
           ref={ref}
-          className={classNames(styles.BaseChat, 'relative flex h-full w-full overflow-hidden')}
+          className={classNames(styles.BaseChat, 'relative flex flex-1 min-h-0 w-full overflow-hidden')}
           data-chat-visible={showChat}
         >
           <ClientOnly>{() => <Menu />}</ClientOnly>
-          <div className="flex flex-row w-full h-full overflow-hidden">
+          <div className="flex flex-row w-full h-full min-w-0 overflow-hidden">
             {/* Chat Panel - hidden when showChat is false and workbench is visible */}
             {showChat && (
               <div
-                className={classNames(styles.Chat, 'flex flex-col flex-grow min-w-[300px] h-full', {
+                className={classNames(styles.Chat, 'flex flex-col flex-grow min-w-[300px] min-h-0 h-full', {
                   'select-none': isResizing,
                   'overflow-hidden': chatStarted || inspectorActive,
                   'overflow-y-auto': !chatStarted && !inspectorActive,

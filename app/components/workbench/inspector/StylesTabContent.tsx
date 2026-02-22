@@ -10,6 +10,7 @@
 
 import { memo } from 'react';
 import type { ElementInfo } from '~/lib/inspector/types';
+import { TEXT_MAX_LENGTH } from '~/lib/inspector/constants';
 import { ImageEditor } from '~/components/workbench/ImageEditor';
 import { StyleGroup } from '~/components/workbench/StyleGroup';
 import { DesignControl } from '~/components/workbench/DesignControl';
@@ -139,14 +140,14 @@ export const StylesTabContent = memo(
               id="inspector-text-content"
               value={pendingTextEdit || selectedElement.textContent}
               onChange={(e) => onTextContentChange(e.target.value)}
-              maxLength={2000}
+              maxLength={TEXT_MAX_LENGTH}
               className="w-full bg-devonz-elements-background-depth-3 border border-devonz-elements-borderColor rounded px-2 py-2 text-devonz-elements-textPrimary text-sm focus:outline-none focus:border-accent-400 resize-none"
               rows={2}
               placeholder="Enter text content..."
             />
             {(pendingTextEdit || selectedElement.textContent || '').length > 100 && (
               <span className="text-[10px] text-devonz-elements-textTertiary mt-1 block text-right">
-                {(pendingTextEdit || selectedElement.textContent || '').length}/2000
+                {(pendingTextEdit || selectedElement.textContent || '').length}/{TEXT_MAX_LENGTH}
               </span>
             )}
           </div>

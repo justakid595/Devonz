@@ -1,5 +1,7 @@
 import { useCallback, useState, useRef, useEffect } from 'react';
 import type { ElementInfo } from './inspector-types';
+import { buildElementSelector } from '~/utils/selector';
+import { CLICK_DEBOUNCE_MS } from '~/lib/inspector/constants';
 
 interface AiQuickActionsProps {
   selectedElement: ElementInfo | null;
@@ -21,7 +23,7 @@ const quickActions: QuickAction[] = [
     label: 'Center',
     description: 'Center this element',
     generatePrompt: (element) => {
-      const selector = buildSelector(element);
+      const selector = buildElementSelector(element);
 
       return `Please center the element \`${selector}\` both horizontally and vertically within its parent container. Use flexbox or grid for modern centering.`;
     },
@@ -32,7 +34,7 @@ const quickActions: QuickAction[] = [
     label: 'Responsive',
     description: 'Make responsive',
     generatePrompt: (element) => {
-      const selector = buildSelector(element);
+      const selector = buildElementSelector(element);
 
       return `Please make the element \`${selector}\` fully responsive. Add appropriate media queries or use relative units (%, rem, vw/vh) so it adapts well to mobile, tablet, and desktop screens.`;
     },
@@ -43,7 +45,7 @@ const quickActions: QuickAction[] = [
     label: 'Animate',
     description: 'Add animation',
     generatePrompt: (element) => {
-      const selector = buildSelector(element);
+      const selector = buildElementSelector(element);
 
       return `Please add a subtle, professional CSS animation to the element \`${selector}\`. Consider a fade-in, slide-in, or gentle hover effect that enhances the user experience without being distracting.`;
     },
@@ -54,7 +56,7 @@ const quickActions: QuickAction[] = [
     label: 'Spacing',
     description: 'Improve spacing',
     generatePrompt: (element) => {
-      const selector = buildSelector(element);
+      const selector = buildElementSelector(element);
       const boxModel = element.boxModel;
       const currentSpacing = boxModel
         ? `Current margin: ${boxModel.margin.top}px ${boxModel.margin.right}px ${boxModel.margin.bottom}px ${boxModel.margin.left}px, padding: ${boxModel.padding.top}px ${boxModel.padding.right}px ${boxModel.padding.bottom}px ${boxModel.padding.left}px`
@@ -69,7 +71,7 @@ const quickActions: QuickAction[] = [
     label: 'A11y',
     description: 'Improve accessibility',
     generatePrompt: (element) => {
-      const selector = buildSelector(element);
+      const selector = buildElementSelector(element);
       const tagName = element.tagName.toLowerCase();
 
       return `Please improve the accessibility of the element \`${selector}\` (${tagName}). Consider adding:
@@ -86,7 +88,7 @@ const quickActions: QuickAction[] = [
     label: 'Shadow',
     description: 'Add shadow effect',
     generatePrompt: (element) => {
-      const selector = buildSelector(element);
+      const selector = buildElementSelector(element);
 
       return `Please add a subtle, modern box-shadow to the element \`${selector}\` to create depth and elevation. Use a soft shadow that works well with both light and dark themes.`;
     },
@@ -97,7 +99,7 @@ const quickActions: QuickAction[] = [
     label: 'Round',
     description: 'Add rounded corners',
     generatePrompt: (element) => {
-      const selector = buildSelector(element);
+      const selector = buildElementSelector(element);
 
       return `Please add appropriate border-radius to the element \`${selector}\` to give it nicely rounded corners. Choose a radius that fits the overall design aesthetic.`;
     },
@@ -108,30 +110,12 @@ const quickActions: QuickAction[] = [
     label: 'Duplicate',
     description: 'Duplicate element',
     generatePrompt: (element) => {
-      const selector = buildSelector(element);
+      const selector = buildElementSelector(element);
 
       return `Please duplicate the element \`${selector}\` and place the copy right after the original. Keep all the same styling and content.`;
     },
   },
 ];
-
-function buildSelector(element: ElementInfo): string {
-  const parts = [element.tagName.toLowerCase()];
-
-  if (element.id) {
-    parts.push(`#${element.id}`);
-  }
-
-  if (element.className) {
-    const firstClass = element.className.split(' ')[0];
-
-    if (firstClass) {
-      parts.push(`.${firstClass}`);
-    }
-  }
-
-  return parts.join('');
-}
 
 export const AiQuickActions = ({ selectedElement, onAIAction }: AiQuickActionsProps) => {
   const [clickedActionId, setClickedActionId] = useState<string | null>(null);
@@ -157,7 +141,7 @@ export const AiQuickActions = ({ selectedElement, onAIAction }: AiQuickActionsPr
         clearTimeout(clickTimerRef.current);
       }
 
-      clickTimerRef.current = setTimeout(() => setClickedActionId(null), 200);
+      clickTimerRef.current = setTimeout(() => setClickedActionId(null), CLICK_DEBOUNCE_MS);
 
       const prompt = action.generatePrompt(selectedElement);
       onAIAction(prompt);
