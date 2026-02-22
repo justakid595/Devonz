@@ -255,6 +255,7 @@ class PreviewErrorHandler {
       /SyntaxError/i,
       /TypeError/i,
       /ReferenceError/i,
+      /RangeError/i,
       /Cannot find module/i,
       /Module not found/i,
       /does not provide an export/i,
@@ -263,6 +264,11 @@ class PreviewErrorHandler {
       /is not defined/i,
       /is not a function/i,
       /Cannot read propert/i,
+      /Element type is invalid/i,
+      /Objects are not valid as a React child/i,
+      /Maximum update depth exceeded/i,
+      /Invalid hook call/i,
+      /must be used within/i,
     ];
 
     return autoFixablePatterns.some((pattern) => pattern.test(errorMessage));

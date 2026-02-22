@@ -46,7 +46,7 @@ import {
   unregisterPreviewAutoFixCallback,
 } from '~/utils/previewErrorHandler';
 import { createAutoFixHandler, handleFixSuccess, isAutoFixActive } from '~/lib/services/autoFixService';
-import { autoFixStore, hasExceededMaxRetries, recordFixAttempt } from '~/lib/stores/autofix';
+import { hasExceededMaxRetries, recordFixAttempt } from '~/lib/stores/autofix';
 import { planActionAtom, clearPlanAction } from '~/lib/stores/plan';
 
 const logger = createScopedLogger('Chat');
@@ -307,13 +307,20 @@ export const ChatImpl = memo(
         workbenchStore.finalizeRunningActions();
 
         /*
-         * Check if this was an auto-fix response
-         * Wait for terminal/preview to run the code, then check if errors cleared
+         * Check if this was an auto-fix response.
+         * Poll for errors over a window long enough for actions to execute
+         * (npm install + dev server restart can take 10-30 seconds).
+         * If an error appears at any point, record failure immediately.
+         * If no error after the full window, declare success.
          */
         if (isAutoFixActive()) {
-          const settings = autoFixStore.get().settings;
+          const POLL_INTERVAL_MS = 3_000;
+          const MAX_POLLS = 5; // 5 polls × 3s = 15s total window
+          let pollCount = 0;
 
-          setTimeout(() => {
+          const pollForErrors = () => {
+            pollCount++;
+
             // Guard: re-check auto-fix hasn't been reset or max retries reached
             if (!isAutoFixActive() || hasExceededMaxRetries()) {
               return;
@@ -321,16 +328,28 @@ export const ChatImpl = memo(
 
             const currentAlert = workbenchStore.actionAlert.get();
 
-            if (!currentAlert) {
-              // No new error detected - fix was successful!
-              handleFixSuccess();
-              logger.info('Auto-fix successful - no new errors detected');
-            } else {
-              // Error still present or new error - record attempt
+            if (currentAlert) {
+              // Error detected — record failure immediately, stop polling
               recordFixAttempt(false);
-              logger.debug('Auto-fix attempt completed, error still present');
+              logger.debug(`Auto-fix attempt failed (detected at poll ${pollCount}/${MAX_POLLS})`);
+
+              return;
             }
-          }, settings.delayBetweenAttempts + 2000); // Wait for code to run + buffer
+
+            if (pollCount >= MAX_POLLS) {
+              // Full window elapsed with no new errors — fix was successful
+              handleFixSuccess();
+              logger.info('Auto-fix successful - no new errors detected after 15s');
+
+              return;
+            }
+
+            // Schedule next poll
+            setTimeout(pollForErrors, POLL_INTERVAL_MS);
+          };
+
+          // Start first poll after initial delay for file writes to flush
+          setTimeout(pollForErrors, POLL_INTERVAL_MS);
         }
       },
       initialMessages,

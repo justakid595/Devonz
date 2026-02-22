@@ -231,10 +231,40 @@ export const USER_FRIENDLY_MESSAGES: Array<{
 
   // React/JSX errors
   {
+    pattern: /Element type is invalid.*expected a string.*but got:?\s*(?:undefined|object|null)/i,
+    title: 'Invalid Component',
+    description: 'A component is undefined — likely a missing or incorrect export/import.',
+    suggestion:
+      'Check that the component is exported from its file and imported with the correct name (default vs named).',
+    severity: 'critical',
+  },
+  {
+    pattern: /Objects are not valid as a React child/i,
+    title: 'Invalid React Child',
+    description: 'An object was rendered where text or a component was expected.',
+    suggestion: 'Ensure you are rendering a string, number, or JSX element — not a raw object or array.',
+    severity: 'critical',
+  },
+  {
+    pattern: /Maximum update depth exceeded/i,
+    title: 'Infinite Re-render Loop',
+    description: 'A component is updating itself in an infinite loop.',
+    suggestion:
+      'Check for state updates inside useEffect without proper dependencies, or event handlers that trigger re-renders.',
+    severity: 'critical',
+  },
+  {
     pattern: /Invalid hook call/i,
     title: 'Invalid Hook Call',
     description: 'React hooks are being used incorrectly.',
     suggestion: 'Hooks must be called at the top level of a function component.',
+    severity: 'critical',
+  },
+  {
+    pattern: /must be used within/i,
+    title: 'Missing Context Provider',
+    description: 'A hook or component requires a parent context provider that is missing.',
+    suggestion: 'Wrap the component tree with the required provider (e.g., <ChartContainer>, <ThemeProvider>).',
     severity: 'critical',
   },
   {
@@ -370,6 +400,21 @@ export const RECOVERY_SUGGESTIONS: Array<{
     pattern: /vite.*plugin|rollup.*plugin/i,
     suggestion:
       'Check vite.config.ts for plugin configuration issues. Ensure all plugins are installed and compatible with your Vite version.',
+  },
+  {
+    pattern: /Element type is invalid/i,
+    suggestion:
+      "Check the component's export: use `export default` for default imports or `export { Name }` for named imports. Verify the import matches the export type.",
+  },
+  {
+    pattern: /Maximum update depth exceeded/i,
+    suggestion:
+      'Look for setState calls inside useEffect without a dependency array, or onClick handlers like `onClick={setCount(count + 1)}` that should be `onClick={() => setCount(count + 1)}`.',
+  },
+  {
+    pattern: /must be used within/i,
+    suggestion:
+      'The component uses a context hook that needs a matching Provider wrapper higher in the component tree. Check the library docs for the required provider component.',
   },
 ];
 

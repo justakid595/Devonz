@@ -136,6 +136,38 @@ function classifyError(error: AutoFixError): ClassifiedError {
     }
   }
 
+  // Pattern: Element type is invalid (wrong import/export)
+  const elementTypeMatch = content.match(/Element type is invalid.*?expected a string.*?but got:?\s*(\w+)/i);
+
+  if (elementTypeMatch) {
+    return {
+      category: 'runtime',
+      fixInstructions: [
+        `**Root Cause**: A component is \`${elementTypeMatch[1]}\` — it was imported but doesn't exist at that export path.`,
+        '',
+        '**Required Fix**:',
+        '1. Check the component file — ensure it uses `export default` if the import is `import Name from ...`, or `export { Name }` if the import is `import { Name } from ...`',
+        '2. Verify the component file path is correct',
+        '3. If the component comes from a library, ensure the package is installed and the import path matches the library docs',
+      ].join('\n'),
+    };
+  }
+
+  // Pattern: Maximum update depth exceeded (infinite re-render)
+  if (content.includes('Maximum update depth exceeded')) {
+    return {
+      category: 'runtime',
+      fixInstructions: [
+        '**Root Cause**: A component is caught in an infinite re-render loop.',
+        '',
+        '**Required Fix**:',
+        '1. Check for `setState()` calls inside `useEffect` without proper dependencies',
+        '2. Check for event handlers that directly call state setters: `onClick={setX(val)}` should be `onClick={() => setX(val)}`',
+        '3. Ensure `useEffect` dependency arrays do not include objects/arrays created on each render',
+      ].join('\n'),
+    };
+  }
+
   // Pattern: SyntaxError or parse errors
   if (content.includes('SyntaxError') || content.includes('Unexpected token') || content.includes('Parse error')) {
     return {
