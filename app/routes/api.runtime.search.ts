@@ -16,8 +16,8 @@ import * as fs from 'node:fs/promises';
 import * as nodePath from 'node:path';
 import fg from 'fast-glob';
 import { RuntimeManager } from '~/lib/runtime/local-runtime';
-import { isValidProjectId } from '~/lib/runtime/runtime-provider';
 import { withSecurity } from '~/lib/security';
+import { searchRequestSchema, parseOrError } from '~/lib/api/schemas';
 import { WORK_DIR } from '~/utils/constants';
 import { createScopedLogger } from '~/utils/logger';
 
@@ -160,12 +160,18 @@ async function searchFile(
  */
 
 async function searchAction({ request }: ActionFunctionArgs) {
-  let body: any;
+  let rawBody: unknown;
 
   try {
-    body = await request.json();
+    rawBody = await request.json();
   } catch {
     return json({ error: 'Invalid JSON in request body' }, { status: 400 });
+  }
+
+  const parsed = parseOrError(searchRequestSchema, rawBody, 'RuntimeSearch');
+
+  if (!parsed.success) {
+    return parsed.response;
   }
 
   const {
@@ -177,15 +183,7 @@ async function searchAction({ request }: ActionFunctionArgs) {
     isRegex = false,
     isWordMatch = false,
     resultLimit = 500,
-  } = body;
-
-  if (!projectId || !isValidProjectId(projectId)) {
-    return json({ error: 'Invalid or missing projectId' }, { status: 400 });
-  }
-
-  if (!query || typeof query !== 'string' || query.trim().length === 0) {
-    return json({ error: 'Invalid or missing query' }, { status: 400 });
-  }
+  } = parsed.data;
 
   /* Cap result limit to a sensible maximum */
   const cappedLimit = Math.min(resultLimit, 5000);

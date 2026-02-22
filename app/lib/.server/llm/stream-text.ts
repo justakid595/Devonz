@@ -1,9 +1,9 @@
 import { convertToCoreMessages, streamText as _streamText, type Message } from 'ai';
 import {
   MAX_TOKENS,
-  PROVIDER_COMPLETION_LIMITS,
   isReasoningModel,
   getThinkingProviderOptions,
+  getCompletionTokenLimit,
   type FileMap,
 } from './constants';
 import { getFineTunedPrompt } from '~/lib/common/prompts/new-prompt';
@@ -12,7 +12,6 @@ import { DEFAULT_MODEL, DEFAULT_PROVIDER, MODIFICATIONS_TAG_NAME, PROVIDER_LIST,
 import type { IProviderSetting } from '~/types/model';
 import { PromptLibrary } from '~/lib/common/prompt-library';
 import { allowedHTMLElements } from '~/utils/markdown';
-import type { ModelInfo } from '~/lib/modules/llm/types';
 import { createScopedLogger } from '~/utils/logger';
 import { createFilesContext, extractPropertiesFromMessage } from './utils';
 import { discussPrompt } from '~/lib/common/prompts/discuss-prompt';
@@ -35,22 +34,7 @@ export interface StreamingOptions extends Omit<Parameters<typeof _streamText>[0]
 
 const logger = createScopedLogger('stream-text');
 
-function getCompletionTokenLimit(modelDetails: ModelInfo): number {
-  // 1. If model specifies completion tokens, use that
-  if (modelDetails.maxCompletionTokens && modelDetails.maxCompletionTokens > 0) {
-    return modelDetails.maxCompletionTokens;
-  }
-
-  // 2. Use provider-specific default
-  const providerDefault = PROVIDER_COMPLETION_LIMITS[modelDetails.provider];
-
-  if (providerDefault) {
-    return providerDefault;
-  }
-
-  // 3. Final fallback to MAX_TOKENS, but cap at reasonable limit for safety
-  return Math.min(MAX_TOKENS, 16384);
-}
+// getCompletionTokenLimit is imported from ./constants
 
 /*
  * Essential files whose content the LLM needs to see in the template message.

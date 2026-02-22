@@ -17,6 +17,7 @@ import { RuntimeManager } from '~/lib/runtime/local-runtime';
 import { isValidProjectId, isSafePath } from '~/lib/runtime/runtime-provider';
 import { validateCommand, auditCommand, DEFAULT_EXEC_TIMEOUT_MS } from '~/lib/runtime/command-safety';
 import { withSecurity } from '~/lib/security';
+import { execRequestSchema, parseOrError } from '~/lib/api/schemas';
 import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('RuntimeExec');
@@ -102,19 +103,22 @@ async function execLoader({ request }: LoaderFunctionArgs) {
  */
 
 async function execAction({ request }: ActionFunctionArgs) {
-  let body: any;
+  let rawBody: unknown;
 
   try {
-    body = await request.json();
+    rawBody = await request.json();
   } catch {
     return json({ error: 'Invalid JSON in request body' }, { status: 400 });
   }
 
-  const { op, projectId } = body;
+  const parsed = parseOrError(execRequestSchema, rawBody, 'RuntimeExec');
 
-  if (!projectId || !isValidProjectId(projectId)) {
-    return json({ error: 'Invalid or missing projectId' }, { status: 400 });
+  if (!parsed.success) {
+    return parsed.response;
   }
+
+  const body = parsed.data;
+  const { op, projectId } = body;
 
   const manager = RuntimeManager.getInstance();
 
@@ -144,10 +148,6 @@ async function execAction({ request }: ActionFunctionArgs) {
 
     case 'exec': {
       const { command, cwd, env } = body;
-
-      if (!command || typeof command !== 'string') {
-        return json({ error: 'Missing or invalid command' }, { status: 400 });
-      }
 
       if (cwd && !isSafePath(cwd)) {
         return json({ error: 'Invalid cwd: traversal detected' }, { status: 400 });

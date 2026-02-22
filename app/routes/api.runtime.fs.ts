@@ -16,6 +16,7 @@ import { RuntimeManager } from '~/lib/runtime/local-runtime';
 import type { RuntimeFileSystem, WatchEvent } from '~/lib/runtime/runtime-provider';
 import { isValidProjectId, isSafePath } from '~/lib/runtime/runtime-provider';
 import { withSecurity } from '~/lib/security';
+import { fsWriteRequestSchema, parseOrError } from '~/lib/api/schemas';
 import { createScopedLogger } from '~/utils/logger';
 
 const logger = createScopedLogger('RuntimeFS');
@@ -188,30 +189,38 @@ async function fsLoader({ request }: LoaderFunctionArgs) {
  */
 
 async function fsAction({ request }: ActionFunctionArgs) {
-  let body: any;
+  let rawBody: unknown;
 
   try {
-    body = await request.json();
+    rawBody = await request.json();
   } catch {
     return json({ error: 'Invalid JSON in request body' }, { status: 400 });
   }
 
-  const { projectId, op } = body;
+  /*
+   * The writeFile op is the default when `op` is omitted.
+   * Inject it before schema validation so the discriminated union works.
+   */
+  const bodyWithOp =
+    typeof rawBody === 'object' && rawBody !== null && !('op' in rawBody)
+      ? { ...(rawBody as Record<string, unknown>), op: 'writeFile' }
+      : rawBody;
 
-  if (!projectId || !isValidProjectId(projectId)) {
-    return json({ error: 'Invalid or missing projectId' }, { status: 400 });
+  const parsed = parseOrError(fsWriteRequestSchema, bodyWithOp, 'RuntimeFS');
+
+  if (!parsed.success) {
+    return parsed.response;
   }
+
+  const body = parsed.data;
+  const { projectId, op } = body;
 
   const manager = RuntimeManager.getInstance();
   const runtime = await manager.getRuntime(projectId);
 
-  switch (op ?? 'writeFile') {
+  switch (op) {
     case 'writeFile': {
       const { path: filePath, content, binary } = body;
-
-      if (!filePath || !isSafePath(filePath)) {
-        return json({ error: 'Invalid path' }, { status: 400 });
-      }
 
       try {
         if (binary) {
@@ -240,10 +249,6 @@ async function fsAction({ request }: ActionFunctionArgs) {
     case 'mkdir': {
       const { path: dirPath, recursive } = body;
 
-      if (!dirPath || !isSafePath(dirPath)) {
-        return json({ error: 'Invalid path' }, { status: 400 });
-      }
-
       try {
         await runtime.fs.mkdir(dirPath, { recursive: recursive ?? false });
         return json({ success: true });
@@ -257,10 +262,6 @@ async function fsAction({ request }: ActionFunctionArgs) {
 
     case 'rm': {
       const { path: rmPath, recursive, force } = body;
-
-      if (!rmPath || !isSafePath(rmPath)) {
-        return json({ error: 'Invalid path' }, { status: 400 });
-      }
 
       try {
         await runtime.fs.rm(rmPath, {
@@ -278,10 +279,6 @@ async function fsAction({ request }: ActionFunctionArgs) {
 
     case 'rename': {
       const { oldPath, newPath } = body;
-
-      if (!oldPath || !isSafePath(oldPath) || !newPath || !isSafePath(newPath)) {
-        return json({ error: 'Invalid path(s)' }, { status: 400 });
-      }
 
       try {
         await runtime.fs.rename(oldPath, newPath);

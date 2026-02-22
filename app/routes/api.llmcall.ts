@@ -3,12 +3,13 @@ import { streamText } from '~/lib/.server/llm/stream-text';
 import type { IProviderSetting, ProviderInfo } from '~/types/model';
 import { generateText } from 'ai';
 import { z } from 'zod';
+import { providerSchema } from '~/lib/api/schemas';
 import { PROVIDER_LIST } from '~/utils/constants';
 import {
   MAX_TOKENS,
-  PROVIDER_COMPLETION_LIMITS,
   isReasoningModel,
   getThinkingProviderOptions,
+  getCompletionTokenLimit,
 } from '~/lib/.server/llm/constants';
 import { LLMManager } from '~/lib/modules/llm/manager';
 import type { ModelInfo } from '~/lib/modules/llm/types';
@@ -23,14 +24,7 @@ export const action = withSecurity(llmCallAction, {
 
 const logger = createScopedLogger('api.llmcall');
 
-// Zod schema for LLM call request validation
-const providerSchema = z.object({
-  name: z.string().min(1, 'Provider name is required'),
-  staticModels: z.array(z.any()).optional(),
-  getApiKeyLink: z.string().optional(),
-  labelForGetApiKey: z.string().optional(),
-  icon: z.string().optional(),
-});
+// providerSchema imported from ~/lib/api/schemas
 
 const llmCallRequestSchema = z.object({
   system: z.string().optional().default(''),
@@ -49,22 +43,7 @@ async function getModelList(options: {
   return llmManager.updateModelList(options);
 }
 
-function getCompletionTokenLimit(modelDetails: ModelInfo): number {
-  // 1. If model specifies completion tokens, use that
-  if (modelDetails.maxCompletionTokens && modelDetails.maxCompletionTokens > 0) {
-    return modelDetails.maxCompletionTokens;
-  }
-
-  // 2. Use provider-specific default
-  const providerDefault = PROVIDER_COMPLETION_LIMITS[modelDetails.provider];
-
-  if (providerDefault) {
-    return providerDefault;
-  }
-
-  // 3. Final fallback to MAX_TOKENS, but cap at reasonable limit for safety
-  return Math.min(MAX_TOKENS, 16384);
-}
+// getCompletionTokenLimit is imported from ~/lib/.server/llm/constants
 
 function validateTokenLimits(modelDetails: ModelInfo, requestedTokens: number): { valid: boolean; error?: string } {
   const modelMaxTokens = modelDetails.maxTokenAllowed || 128000;

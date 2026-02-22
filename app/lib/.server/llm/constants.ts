@@ -93,6 +93,28 @@ export function getThinkingProviderOptions(
   return undefined;
 }
 
+/**
+ * Calculate the completion token limit for a given model.
+ *
+ * Priority:
+ * 1. Model-specific `maxCompletionTokens`
+ * 2. Provider-specific default from `PROVIDER_COMPLETION_LIMITS`
+ * 3. Fallback: `min(MAX_TOKENS, 16384)`
+ */
+export function getCompletionTokenLimit(modelDetails: { maxCompletionTokens?: number; provider: string }): number {
+  if (modelDetails.maxCompletionTokens && modelDetails.maxCompletionTokens > 0) {
+    return modelDetails.maxCompletionTokens;
+  }
+
+  const providerDefault = PROVIDER_COMPLETION_LIMITS[modelDetails.provider];
+
+  if (providerDefault) {
+    return providerDefault;
+  }
+
+  return Math.min(MAX_TOKENS, 16384);
+}
+
 // limits the number of model responses that can be returned in a single request
 export const MAX_RESPONSE_SEGMENTS = 2;
 

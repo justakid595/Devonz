@@ -17,9 +17,9 @@ import type { ActionFunctionArgs, LoaderFunctionArgs } from '@remix-run/node';
 import { json } from '@remix-run/node';
 import { existsSync } from 'node:fs';
 import { RuntimeManager } from '~/lib/runtime/local-runtime';
-import { isValidProjectId } from '~/lib/runtime/runtime-provider';
 import { validateCommand, auditCommand } from '~/lib/runtime/command-safety';
 import { withSecurity } from '~/lib/security';
+import { terminalRequestSchema, parseOrError } from '~/lib/api/schemas';
 import { createScopedLogger } from '~/utils/logger';
 
 /**
@@ -167,23 +167,26 @@ async function terminalLoader({ request }: LoaderFunctionArgs) {
  */
 
 async function terminalAction({ request }: ActionFunctionArgs) {
-  let body: any;
+  let rawBody: unknown;
 
   try {
-    body = await request.json();
+    rawBody = await request.json();
   } catch {
     return json({ error: 'Invalid JSON in request body' }, { status: 400 });
   }
 
+  const parsed = parseOrError(terminalRequestSchema, rawBody, 'RuntimeTerminal');
+
+  if (!parsed.success) {
+    return parsed.response;
+  }
+
+  const body = parsed.data;
   const { op } = body;
 
   switch (op) {
     case 'spawn': {
       const { projectId, command, cols, rows, env, cwd } = body;
-
-      if (!projectId || !isValidProjectId(projectId)) {
-        return json({ error: 'Invalid or missing projectId' }, { status: 400 });
-      }
 
       /*
        * Normalize shell command for the current platform.
@@ -253,10 +256,6 @@ async function terminalAction({ request }: ActionFunctionArgs) {
     case 'write': {
       const { sessionId, data } = body;
 
-      if (!sessionId || typeof data !== 'string') {
-        return json({ error: 'Missing sessionId or data' }, { status: 400 });
-      }
-
       try {
         const manager = RuntimeManager.getInstance();
 
@@ -284,10 +283,6 @@ async function terminalAction({ request }: ActionFunctionArgs) {
     case 'resize': {
       const { sessionId, cols, rows } = body;
 
-      if (!sessionId || !cols || !rows) {
-        return json({ error: 'Missing sessionId, cols, or rows' }, { status: 400 });
-      }
-
       // Resize is a no-op for basic child_process (Phase 2: node-pty)
       logger.debug(`Resize request for ${sessionId}: ${cols}x${rows} (no-op in Phase 1)`);
 
@@ -296,10 +291,6 @@ async function terminalAction({ request }: ActionFunctionArgs) {
 
     case 'kill': {
       const { sessionId, signal } = body;
-
-      if (!sessionId) {
-        return json({ error: 'Missing sessionId' }, { status: 400 });
-      }
 
       try {
         const manager = RuntimeManager.getInstance();
@@ -326,10 +317,6 @@ async function terminalAction({ request }: ActionFunctionArgs) {
 
     case 'list': {
       const { projectId } = body;
-
-      if (!projectId || !isValidProjectId(projectId)) {
-        return json({ error: 'Invalid or missing projectId' }, { status: 400 });
-      }
 
       try {
         const manager = RuntimeManager.getInstance();

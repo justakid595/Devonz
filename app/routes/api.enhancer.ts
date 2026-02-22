@@ -6,6 +6,7 @@ import { getApiKeysFromCookie, getProviderSettingsFromCookie } from '~/lib/api/c
 import { createScopedLogger } from '~/utils/logger';
 import { z } from 'zod';
 import { withSecurity } from '~/lib/security';
+import { providerSchema } from '~/lib/api/schemas';
 
 export const action = withSecurity(enhancerAction, {
   allowedMethods: ['POST'],
@@ -14,20 +15,7 @@ export const action = withSecurity(enhancerAction, {
 
 const logger = createScopedLogger('api.enhancer');
 
-// Zod schema for enhancer request validation
-const providerSchema = z.object({
-  name: z.string().min(1, 'Provider name is required'),
-  staticModels: z
-    .array(
-      z
-        .object({ name: z.string(), label: z.string(), provider: z.string(), maxTokenAllowed: z.number() })
-        .passthrough(),
-    )
-    .optional(),
-  getApiKeyLink: z.string().optional(),
-  labelForGetApiKey: z.string().optional(),
-  icon: z.string().optional(),
-});
+// providerSchema imported from ~/lib/api/schemas
 
 const enhancerRequestSchema = z.object({
   message: z.string().min(1, 'Message is required'),
