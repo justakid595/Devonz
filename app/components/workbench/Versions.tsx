@@ -327,8 +327,11 @@ export const Versions = memo(() => {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [checkedOutSha, setCheckedOutSha] = useState<string | null>(null);
-  const [changedFiles, setChangedFiles] = useState<{ sha: string; files: FileChange[] } | null>(null);
-  const [fileDiffs, setFileDiffs] = useState<Map<string, string>>(new Map());
+  const [filesModal, setFilesModal] = useState<{
+    sha: string;
+    files: FileChange[];
+    diffs: Map<string, string>;
+  } | null>(null);
   const [downloading, setDownloading] = useState<string | null>(null);
   const [diffModalContent, setDiffModalContent] = useState<string | null>(null);
   const [restoring, setRestoring] = useState(false);
@@ -479,54 +482,25 @@ export const Versions = memo(() => {
     }
   }, [restoring, loadCommits]);
 
-  const handleViewFiles = useCallback(
-    async (sha: string) => {
-      const currentProjectId = runtimeContext.projectId;
+  const handleViewFiles = useCallback(async (sha: string) => {
+    const currentProjectId = runtimeContext.projectId;
 
-      if (!currentProjectId) {
-        return;
-      }
+    if (!currentProjectId) {
+      return;
+    }
 
-      if (changedFiles?.sha === sha) {
-        setChangedFiles(null);
-        setFileDiffs(new Map());
+    const files = await getCommitFilesWithStatus(currentProjectId, sha);
 
-        return;
-      }
+    // Fetch all diffs in parallel
+    const diffEntries = await Promise.all(
+      files.map(async ({ file }) => {
+        const diff = await getFileDiff(currentProjectId, sha, file);
+        return [file, diff || '(no changes)'] as const;
+      }),
+    );
 
-      const files = await getCommitFilesWithStatus(currentProjectId, sha);
-      setChangedFiles({ sha, files });
-      setFileDiffs(new Map());
-    },
-    [changedFiles],
-  );
-
-  const handleFileDiff = useCallback(
-    async (sha: string, file: string) => {
-      const currentProjectId = runtimeContext.projectId;
-
-      if (!currentProjectId) {
-        return;
-      }
-
-      const key = `${sha}:${file}`;
-
-      if (fileDiffs.has(key)) {
-        // Toggle off
-        setFileDiffs((prev) => {
-          const next = new Map(prev);
-          next.delete(key);
-
-          return next;
-        });
-        return;
-      }
-
-      const diff = await getFileDiff(currentProjectId, sha, file);
-      setFileDiffs((prev) => new Map(prev).set(key, diff || '(no changes)'));
-    },
-    [fileDiffs],
-  );
+    setFilesModal({ sha, files, diffs: new Map(diffEntries) });
+  }, []);
 
   const handleDownload = useCallback(
     async (sha: string, type: 'full' | 'changed') => {
@@ -681,150 +655,6 @@ export const Versions = memo(() => {
                     isExpanded={expandedSha === commit.sha}
                     onToggleExpand={handleToggleExpand}
                   />
-                  {/* Changed files dropdown */}
-                  {changedFiles?.sha === commit.sha && changedFiles.files.length > 0 && (
-                    <motion.div
-                      initial={{ opacity: 0, height: 0 }}
-                      animate={{ opacity: 1, height: 'auto' }}
-                      exit={{ opacity: 0, height: 0 }}
-                      className="mb-2 rounded-lg text-xs overflow-hidden"
-                      style={{
-                        background: 'var(--devonz-elements-bg-depth-3)',
-                        border: '1px solid var(--devonz-elements-borderColor)',
-                      }}
-                    >
-                      <div
-                        className="flex items-center justify-between px-3 py-2"
-                        style={{ borderBottom: '1px solid var(--devonz-elements-borderColor)' }}
-                      >
-                        <span className="font-medium text-devonz-elements-textSecondary">
-                          {changedFiles.files.length} file{changedFiles.files.length !== 1 ? 's' : ''} changed
-                        </span>
-                        <div className="flex gap-1">
-                          <button
-                            onClick={() => handleDownload(commit.sha, 'changed')}
-                            className="flex items-center gap-1 px-2 py-0.5 rounded text-xs transition-colors"
-                            style={{
-                              background: 'var(--devonz-elements-button-secondary-background)',
-                              color: 'var(--devonz-elements-textSecondary)',
-                            }}
-                            title="Download changed files"
-                          >
-                            <div className="i-ph:download-simple text-xs" />
-                            <span>Changed</span>
-                          </button>
-                          <button
-                            onClick={() => handleDownload(commit.sha, 'full')}
-                            className="flex items-center gap-1 px-2 py-0.5 rounded text-xs transition-colors"
-                            style={{
-                              background: 'var(--devonz-elements-button-secondary-background)',
-                              color: 'var(--devonz-elements-textSecondary)',
-                            }}
-                            title="Download full project"
-                          >
-                            <div className="i-ph:download-simple text-xs" />
-                            <span>Full</span>
-                          </button>
-                        </div>
-                      </div>
-                      {changedFiles.files.map(({ file, status }) => {
-                        const diffKey = `${commit.sha}:${file}`;
-                        const diff = fileDiffs.get(diffKey);
-                        const isOpen = fileDiffs.has(diffKey);
-
-                        return (
-                          <div
-                            key={file}
-                            style={{
-                              borderBottom: '1px solid var(--devonz-elements-borderColor)',
-                              background: '#17191f',
-                            }}
-                          >
-                            <button
-                              onClick={() => handleFileDiff(commit.sha, file)}
-                              className="flex items-center gap-1.5 w-full px-3 py-1.5 text-left transition-colors hover:bg-devonz-elements-bg-depth-4"
-                            >
-                              <span
-                                className="w-4 text-center font-mono font-bold text-xs"
-                                style={{
-                                  color: status === 'A' ? '#4ade80' : status === 'D' ? '#f87171' : '#fbbf24',
-                                }}
-                              >
-                                {status}
-                              </span>
-                              <div className="i-ph:file-text text-xs text-devonz-elements-textSecondary" />
-                              <span className="font-mono text-devonz-elements-textPrimary truncate">{file}</span>
-                              <motion.div
-                                className="i-ph:caret-right text-xs ml-auto text-devonz-elements-textSecondary"
-                                animate={{ rotate: isOpen ? 90 : 0 }}
-                                transition={{ duration: 0.15 }}
-                              />
-                            </button>
-                            <AnimatePresence>
-                              {isOpen && diff && (
-                                <motion.div
-                                  initial={{ height: 0, opacity: 0 }}
-                                  animate={{ height: 'auto', opacity: 1 }}
-                                  exit={{ height: 0, opacity: 0 }}
-                                  transition={{ duration: 0.15 }}
-                                  className="overflow-hidden"
-                                >
-                                  <div className="px-2 pb-2">
-                                    <div className="flex justify-end mb-1">
-                                      <button
-                                        onClick={() => setDiffModalContent(diff)}
-                                        className="text-xs px-2 py-0.5 rounded transition-colors"
-                                        style={{
-                                          color: 'var(--devonz-elements-item-contentAccent)',
-                                        }}
-                                      >
-                                        View full diff →
-                                      </button>
-                                    </div>
-                                    <pre
-                                      className="rounded-md p-2 overflow-x-auto text-xs font-mono leading-relaxed"
-                                      style={{
-                                        background: 'var(--devonz-elements-bg-depth-1)',
-                                        border: '1px solid var(--devonz-elements-borderColor)',
-                                        maxHeight: '300px',
-                                      }}
-                                    >
-                                      {diff.split('\n').map((line, i) => {
-                                        let color = 'var(--devonz-elements-textTertiary)';
-                                        let bg = 'transparent';
-
-                                        if (line.startsWith('+') && !line.startsWith('+++')) {
-                                          color = '#4ade80';
-                                          bg = 'rgba(74, 222, 128, 0.08)';
-                                        } else if (line.startsWith('-') && !line.startsWith('---')) {
-                                          color = '#f87171';
-                                          bg = 'rgba(248, 113, 113, 0.08)';
-                                        } else if (line.startsWith('@@')) {
-                                          color = '#60a5fa';
-                                        } else if (line.startsWith('diff ') || line.startsWith('index ')) {
-                                          color = 'var(--devonz-elements-textTertiary)';
-                                        }
-
-                                        return (
-                                          <div
-                                            key={i}
-                                            style={{ color, backgroundColor: bg }}
-                                            className="whitespace-pre"
-                                          >
-                                            {line}
-                                          </div>
-                                        );
-                                      })}
-                                    </pre>
-                                  </div>
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-                          </div>
-                        );
-                      })}
-                    </motion.div>
-                  )}
                 </div>
               );
             })}
@@ -972,6 +802,155 @@ export const Versions = memo(() => {
                     );
                   })}
                 </pre>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Changed Files Modal */}
+      <AnimatePresence>
+        {filesModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center"
+            style={{ backgroundColor: 'rgba(0, 0, 0, 0.85)' }}
+            onClick={() => setFilesModal(null)}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Changed files"
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              className="rounded-xl overflow-hidden flex flex-col"
+              style={{
+                width: '90vw',
+                maxWidth: '1000px',
+                maxHeight: '85vh',
+                background: 'var(--devonz-elements-bg-depth-2)',
+                border: '2px solid var(--devonz-elements-borderColor)',
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div
+                className="flex items-center justify-between px-4 py-3"
+                style={{ borderBottom: '1px solid var(--devonz-elements-borderColor)' }}
+              >
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-medium text-devonz-elements-textPrimary">
+                    {filesModal.files.length} file{filesModal.files.length !== 1 ? 's' : ''} changed
+                  </span>
+                  <span
+                    className="px-1.5 py-0.5 rounded text-xs font-mono"
+                    style={{
+                      background: 'var(--devonz-elements-button-secondary-background)',
+                      color: 'var(--devonz-elements-textSecondary)',
+                    }}
+                  >
+                    {filesModal.sha.slice(0, 7)}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleDownload(filesModal.sha, 'changed')}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs transition-colors"
+                    style={{
+                      background: 'var(--devonz-elements-button-secondary-background)',
+                      color: 'var(--devonz-elements-textSecondary)',
+                    }}
+                    title="Download changed files"
+                  >
+                    <div className="i-ph:download-simple text-xs" />
+                    <span>Changed</span>
+                  </button>
+                  <button
+                    onClick={() => handleDownload(filesModal.sha, 'full')}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs transition-colors"
+                    style={{
+                      background: 'var(--devonz-elements-button-secondary-background)',
+                      color: 'var(--devonz-elements-textSecondary)',
+                    }}
+                    title="Download full project"
+                  >
+                    <div className="i-ph:download-simple text-xs" />
+                    <span>Full</span>
+                  </button>
+                  <button
+                    onClick={() => setFilesModal(null)}
+                    className="flex items-center justify-center rounded-full transition-colors"
+                    style={{
+                      width: '28px',
+                      height: '28px',
+                      background: 'var(--devonz-elements-button-secondary-background)',
+                      color: 'var(--devonz-elements-textSecondary)',
+                    }}
+                    aria-label="Close changed files"
+                  >
+                    <div className="i-ph:x text-sm" />
+                  </button>
+                </div>
+              </div>
+
+              {/* File list with diffs */}
+              <div className="flex-1 overflow-auto">
+                {filesModal.files.map(({ file, status }) => {
+                  const diff = filesModal.diffs.get(file);
+
+                  return (
+                    <div key={file} style={{ borderBottom: '1px solid var(--devonz-elements-borderColor)' }}>
+                      <div
+                        className="flex items-center gap-2 px-4 py-2"
+                        style={{ background: 'var(--devonz-elements-bg-depth-3)' }}
+                      >
+                        <span
+                          className="w-4 text-center font-mono font-bold text-xs"
+                          style={{
+                            color: status === 'A' ? '#4ade80' : status === 'D' ? '#f87171' : '#fbbf24',
+                          }}
+                        >
+                          {status}
+                        </span>
+                        <div className="i-ph:file-text text-xs text-devonz-elements-textSecondary" />
+                        <span className="font-mono text-sm text-devonz-elements-textPrimary">{file}</span>
+                      </div>
+                      {diff && (
+                        <pre
+                          className="px-4 py-2 text-xs font-mono leading-relaxed overflow-x-auto"
+                          style={{ background: 'var(--devonz-elements-bg-depth-1)' }}
+                        >
+                          {diff.split('\n').map((line, i) => {
+                            let color = 'var(--devonz-elements-textTertiary)';
+                            let bg = 'transparent';
+
+                            if (line.startsWith('+') && !line.startsWith('+++')) {
+                              color = '#4ade80';
+                              bg = 'rgba(74, 222, 128, 0.08)';
+                            } else if (line.startsWith('-') && !line.startsWith('---')) {
+                              color = '#f87171';
+                              bg = 'rgba(248, 113, 113, 0.08)';
+                            } else if (line.startsWith('@@')) {
+                              color = '#60a5fa';
+                            } else if (line.startsWith('diff ') || line.startsWith('index ')) {
+                              color = 'var(--devonz-elements-textTertiary)';
+                            }
+
+                            return (
+                              <div key={i} style={{ color, backgroundColor: bg }} className="whitespace-pre">
+                                {line}
+                              </div>
+                            );
+                          })}
+                        </pre>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </motion.div>
           </motion.div>
