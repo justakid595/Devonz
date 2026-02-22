@@ -13,6 +13,7 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({ temp
   const overlayRef = useRef<HTMLDivElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const iframeRef = useRef<HTMLIFrameElement>(null);
   const [iframeLoading, setIframeLoading] = useState(true);
   const [iframeError, setIframeError] = useState(false);
 
@@ -20,6 +21,25 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({ temp
   useEffect(() => {
     setIframeLoading(true);
     setIframeError(false);
+  }, [template]);
+
+  // Ref-based iframe load listener (more reliable cross-browser than React onLoad)
+  useEffect(() => {
+    const iframe = iframeRef.current;
+
+    if (!iframe || !template?.vercelUrl?.trim()) {
+      return undefined;
+    }
+
+    const onLoad = () => {
+      setIframeLoading(false);
+    };
+
+    iframe.addEventListener('load', onLoad);
+
+    return () => {
+      iframe.removeEventListener('load', onLoad);
+    };
   }, [template]);
 
   // Prevent body scroll when modal is open
@@ -44,7 +64,7 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({ temp
     const timer = setTimeout(() => {
       setIframeError(true);
       setIframeLoading(false);
-    }, 15_000);
+    }, 8_000);
 
     return () => {
       clearTimeout(timer);
@@ -102,7 +122,8 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({ temp
   }, [template, onClose]);
 
   // All hooks must be above the early return to satisfy Rules of Hooks
-  const handleIframeLoad = useCallback(() => {
+  const handleIframeError = useCallback(() => {
+    setIframeError(true);
     setIframeLoading(false);
   }, []);
 
@@ -160,12 +181,12 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({ temp
             </div>
           )}
           <iframe
+            ref={iframeRef}
             src={vercelUrl}
             title={`${template.name} live preview`}
             className="w-full h-full min-h-[400px] border-0"
             sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-            onLoad={handleIframeLoad}
-            onError={() => setIframeError(true)}
+            onError={handleIframeError}
           />
         </div>
       );
