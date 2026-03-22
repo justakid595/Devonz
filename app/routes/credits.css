@@ -1,0 +1,31 @@
+.credits-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    background-color: #121212; /* Dark background */
+    color: #FFFFFF; /* Readable text */
+    font-family: Arial, sans-serif;
+    padding: 20px;
+}
+
+.credits-page h1 {
+    margin-bottom: 20px;
+    font-size: 2.5em;
+}
+
+.credits-page p {
+    margin: 10px 0;
+    line-height: 1.5;
+}
+
+.credits-page a {
+    margin-top: 15px;
+    color: #BB86FC; /* Accent color */
+    text-decoration: none;
+}
+
+.credits-page a:hover {
+    text-decoration: underline;
+}
